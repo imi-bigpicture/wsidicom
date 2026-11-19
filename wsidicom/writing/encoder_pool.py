@@ -15,18 +15,11 @@
 """Priority-based encoder pool for parallel tile encoding."""
 
 import contextlib
-from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
 from types import TracebackType
 from typing import Any
 
-import numpy as np
-
-from wsidicom.codec import Encoder
-from wsidicom.downsampler import Downsampler
-from wsidicom.geometry import Size
-from wsidicom.stitcher import NumpyStitcher
 from wsidicom.thread import (
     CancelableQueue,
     CancellationToken,
@@ -40,6 +33,7 @@ from wsidicom.writing.models import (
     DownsampleEncodeTask,
     EncodeTask,
     EncodingTaskResult,
+    RecodeTask,
 )
 
 
@@ -48,12 +42,7 @@ class EncoderPool:
 
     def __init__(
         self,
-        encoder: Encoder,
         num_workers: int,
-        downsampler: Downsampler,
-        stitcher: NumpyStitcher,
-        tile_size: Size,
-        blank_tile: np.ndarray,
         input_queue_maxsize: int = 100,
         *,
         token: CancellationToken,
@@ -62,19 +51,8 @@ class EncoderPool:
 
         Parameters
         ----------
-        encoder: Encoder
-            Encoder to use for encoding tiles.
         num_workers: int
             Number of encoder worker threads.
-        downsampler: Downsampler
-            Downsampler for downsample+encode tasks.
-        stitcher: NumpyStitcher
-            Stitcher used to combine input tile blocks before downsampling.
-        tile_size: Size
-            Output tile size for downsample+encode tasks.
-        blank_tile: np.ndarray
-            Background tile of the output tile size, used to pad a downsampled
-            edge block back to a full tile. Treated as read-only.
         input_queue_maxsize: int
             Maximum size of input queue. Provides backpressure when full.
         token: CancellationToken
@@ -82,14 +60,9 @@ class EncoderPool:
             fails cancels it, and all blocking queue operations observe it so
             the pipeline unwinds instead of deadlocking.
         """
-        self._encoder = encoder
-        self._downsampler = downsampler
-        self._stitcher = stitcher
-        self._tile_size = tile_size
-        self._blank_tile = blank_tile
         self._token = token
         self._input_queue: CancelableQueue[
-            EncodeTask | DownsampleEncodeTask | ShutdownSentinel
+            EncodeTask | RecodeTask | DownsampleEncodeTask | ShutdownSentinel
         ] = PriorityCancelableQueue(maxsize=input_queue_maxsize)
         self._executor = ThreadPoolExecutor(
             max_workers=num_workers, thread_name_prefix="EncoderWorker"
@@ -105,7 +78,7 @@ class EncoderPool:
         self._dispatcher_thread.start()
 
     @property
-    def queue(self) -> WriteOnlyQueue[EncodeTask | DownsampleEncodeTask]:
+    def queue(self) -> WriteOnlyQueue[EncodeTask | RecodeTask | DownsampleEncodeTask]:
         """The queue for submitting encoding tasks."""
         return self._input_queue
 
@@ -140,10 +113,14 @@ class EncoderPool:
         except Cancelled:
             return
 
-    def _dispatch_task(self, task: EncodeTask | DownsampleEncodeTask) -> None:
+    def _dispatch_task(
+        self, task: EncodeTask | RecodeTask | DownsampleEncodeTask
+    ) -> None:
         """Dispatch a task to the appropriate handler."""
         if isinstance(task, DownsampleEncodeTask):
             self._downsample_and_encode(task)
+        elif isinstance(task, RecodeTask):
+            self._recode(task)
         else:
             self._encode(task)
 
@@ -170,7 +147,23 @@ class EncoderPool:
                 task.output_queue,
                 EncodingTaskResult(
                     coordinates=task.coordinates,
-                    tiles=[self._encoder.encode(tile) for tile in task.tiles],
+                    tiles=[task.encoder.encode(tile) for tile in task.tiles],
+                ),
+            )
+        except Exception as exception:
+            self._token.cancel(exception)
+
+    def _recode(self, task: RecodeTask) -> None:
+        """Recode encoded tiles with the task's recoder and submit them.
+
+        Failures cancel the token, as for `_encode`.
+        """
+        try:
+            self._safe_put(
+                task.output_queue,
+                EncodingTaskResult(
+                    coordinates=task.coordinates,
+                    tiles=[task.recoder.recode(tile) for tile in task.tiles],
                 ),
             )
         except Exception as exception:
@@ -190,9 +183,9 @@ class EncoderPool:
         ahead of a cascaded tile.
         """
         try:
-            downsampled = self._downsample_block(task.tiles)
+            downsampled = task.block_downsampler.downsample(task.tiles)
             if task.output_queue is not None:
-                encoded = [self._encoder.encode(downsampled)]
+                encoded = [task.encoder.encode(downsampled)]
                 self._safe_put(
                     task.output_queue,
                     EncodingTaskResult(
@@ -215,60 +208,6 @@ class EncoderPool:
             self._token.cancel(exception)
         finally:
             task.cascade_tracker.decrement()
-
-    def _downsample_block(
-        self,
-        tiles: Sequence[Sequence[np.ndarray]],
-    ) -> np.ndarray:
-        """Downsample a block of tiles into one output tile.
-
-        Chooses between reduce-each-then-stitch (fast path when the downsampler
-        supports it) and stitch-then-halve (standard path). Both halve the block
-        by exactly 2x; the result is then padded to the full output tile size,
-        which matters at the right and bottom edges of a level where the input
-        block is smaller than 2x2.
-        """
-        if self._downsampler.commutes_with_stitch:
-            reduced = [
-                [self._downsampler.reduce_by_half(tile) for tile in row]
-                for row in tiles
-            ]
-            block = self._stitcher.stitch_grid(reduced)
-        else:
-            composite = self._stitcher.stitch_grid(tiles)
-            # Halve the composite, rather than resizing it to the output tile
-            # size: a partial edge block is smaller than 2x2, and resizing it to
-            # a full tile would stretch it instead of downsampling it.
-            half = Size(composite.shape[1] // 2, composite.shape[0] // 2)
-            block = self._downsampler.downsample(composite, half)
-        return self._pad_to_tile(block)
-
-    def _pad_to_tile(self, block: np.ndarray) -> np.ndarray:
-        """Pad a downsampled block to the full output tile size.
-
-        At the right and bottom edges of a level the input block can be smaller
-        than 2x2 (the level below has an odd number of tiles), so the halved
-        block covers only part of the output tile. The remainder lies outside
-        the image and is filled with the background color, matching how source
-        edge tiles are padded.
-
-        Parameters
-        ----------
-        block: np.ndarray
-            The halved block, at most the output tile size.
-
-        Returns
-        -------
-        np.ndarray
-            The block padded to the full output tile size.
-        """
-        height, width = block.shape[0], block.shape[1]
-        if (width, height) == (self._tile_size.width, self._tile_size.height):
-            return block
-        # blank_tile is a cached, shared array - copy before writing into it.
-        canvas = self._blank_tile.copy()
-        canvas[:height, :width] = block
-        return canvas
 
     def __enter__(self) -> "EncoderPool":
         """Context manager entry."""

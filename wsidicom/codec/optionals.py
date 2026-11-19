@@ -28,6 +28,7 @@ __all__ = [
     "jpeg2k_encode",
     "jpeg_decode",
     "jpeg_encode",
+    "jpeg_transcode",
     "jpegls_decode",
     "jpegls_encode",
     "jpegxl_decode",
@@ -62,6 +63,7 @@ try:
         jpeg2k_encode,
         jpeg_decode,
         jpeg_encode,
+        jpeg_transcode,
         jpegls_decode,
         jpegls_encode,
         jpegxl_decode,
@@ -82,6 +84,7 @@ except ImportError:
     jpeg2k_encode = None
     jpeg_decode = None
     jpeg_encode = None
+    jpeg_transcode = None
     jpegls_decode = None
     jpegls_encode = None
     jpegxl_decode = None

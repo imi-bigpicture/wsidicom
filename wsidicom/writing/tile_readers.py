@@ -17,6 +17,9 @@
 Each reader reads tiles from source ImageData and dispatches them:
 - PassthroughTileReader: encoded only, no accumulator
 - CascadingPassthroughTileReader: encoded + decoded, feeds accumulator
+- RecodeTileReader: encoded only, submits to encoder pool to be recoded
+- CascadingRecodeTileReader: encoded + decoded, submits to encoder pool to be
+  recoded + feeds accumulator
 - TranscodeTileReader: decoded only, submits to encoder pool
 - CascadingTranscodeTileReader: decoded, submits to encoder pool + feeds accumulator
 """
@@ -27,6 +30,7 @@ from typing import Protocol
 
 import numpy as np
 
+from wsidicom.codec import Encoder, Recoder
 from wsidicom.geometry import Point
 from wsidicom.instance import ImageData
 from wsidicom.thread import CancellationToken, WriteOnlyQueue
@@ -34,6 +38,7 @@ from wsidicom.writing.models import (
     EncodeTask,
     EncodingTaskResult,
     PyramidTilePosition,
+    RecodeTask,
 )
 
 
@@ -187,6 +192,75 @@ class CascadingPassthroughTileReader(TileReader):
             self._submit_row(output_queue, row_start, row_tiles, z_index, path_index)
 
 
+class RecodeTileReader(PassthroughTileReader):
+    """Reads encoded tiles and submits them to the encoder pool to be recoded."""
+
+    def __init__(
+        self,
+        level_index: int,
+        encoder_pool_queue: WriteOnlyQueue[RecodeTask],
+        recoder: Recoder,
+        token: CancellationToken,
+    ) -> None:
+        super().__init__(level_index, token)
+        self._encoder_pool_queue = encoder_pool_queue
+        self._recoder = recoder
+
+    def _submit_row(
+        self,
+        output_queue: WriteOnlyQueue[EncodingTaskResult],
+        row_start: Point,
+        tiles: list[bytes],
+        z_index: int,
+        path_index: int,
+    ) -> None:
+        """Submit a row of consecutive encoded tiles to be recoded."""
+        self._encoder_pool_queue.put(
+            RecodeTask(
+                coordinates=self._make_coordinates(row_start, z_index, path_index),
+                tiles=tiles,
+                recoder=self._recoder,
+                output_queue=output_queue,
+            ),
+            self._token,
+        )
+
+
+class CascadingRecodeTileReader(CascadingPassthroughTileReader):
+    """Reads encoded+decoded tiles, recodes encoded, feeds decoded to accumulator."""
+
+    def __init__(
+        self,
+        level_index: int,
+        encoder_pool_queue: WriteOnlyQueue[RecodeTask],
+        recoder: Recoder,
+        accumulator: TileAccumulator,
+        token: CancellationToken,
+    ) -> None:
+        super().__init__(level_index, accumulator, token)
+        self._encoder_pool_queue = encoder_pool_queue
+        self._recoder = recoder
+
+    def _submit_row(
+        self,
+        output_queue: WriteOnlyQueue[EncodingTaskResult],
+        row_start: Point,
+        tiles: list[bytes],
+        z_index: int,
+        path_index: int,
+    ) -> None:
+        """Submit a row of consecutive encoded tiles to be recoded."""
+        self._encoder_pool_queue.put(
+            RecodeTask(
+                coordinates=self._make_coordinates(row_start, z_index, path_index),
+                tiles=tiles,
+                recoder=self._recoder,
+                output_queue=output_queue,
+            ),
+            self._token,
+        )
+
+
 class TranscodeTileReader(TileReader):
     """Reads decoded tiles and submits to encoder pool."""
 
@@ -194,10 +268,12 @@ class TranscodeTileReader(TileReader):
         self,
         level_index: int,
         encoder_pool_queue: WriteOnlyQueue[EncodeTask],
+        encoder: Encoder,
         token: CancellationToken,
     ) -> None:
         super().__init__(level_index, token)
         self._encoder_pool_queue = encoder_pool_queue
+        self._encoder = encoder
 
     def read_and_submit(
         self,
@@ -223,6 +299,7 @@ class TranscodeTileReader(TileReader):
                             row_start, z_index, path_index
                         ),
                         tiles=row_tiles,
+                        encoder=self._encoder,
                         output_queue=output_queue,
                     ),
                     self._token,
@@ -236,6 +313,7 @@ class TranscodeTileReader(TileReader):
                 EncodeTask(
                     coordinates=self._make_coordinates(row_start, z_index, path_index),
                     tiles=row_tiles,
+                    encoder=self._encoder,
                     output_queue=output_queue,
                 ),
                 self._token,
@@ -249,11 +327,13 @@ class CascadingTranscodeTileReader(TileReader):
         self,
         level_index: int,
         encoder_pool_queue: WriteOnlyQueue[EncodeTask],
+        encoder: Encoder,
         accumulator: TileAccumulator,
         token: CancellationToken,
     ) -> None:
         super().__init__(level_index, token)
         self._encoder_pool_queue = encoder_pool_queue
+        self._encoder = encoder
         self._accumulator = accumulator
 
     @property
@@ -284,6 +364,7 @@ class CascadingTranscodeTileReader(TileReader):
                             row_start, z_index, path_index
                         ),
                         tiles=row_tiles,
+                        encoder=self._encoder,
                         output_queue=output_queue,
                     ),
                     self._token,
@@ -300,6 +381,7 @@ class CascadingTranscodeTileReader(TileReader):
                 EncodeTask(
                     coordinates=self._make_coordinates(row_start, z_index, path_index),
                     tiles=row_tiles,
+                    encoder=self._encoder,
                     output_queue=output_queue,
                 ),
                 self._token,

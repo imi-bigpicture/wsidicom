@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 from decoy import Decoy, matchers
 
-from wsidicom.codec import Encoder
+from wsidicom.codec import Encoder, Recoder
 from wsidicom.downsampler import Downsampler, PillowDownsampler
 from wsidicom.geometry import Size
 from wsidicom.stitcher import NumpyStitcher
@@ -30,12 +30,14 @@ from wsidicom.thread import (
     FifoCancelableQueue,
     PriorityCancelableQueue,
 )
+from wsidicom.writing.block_downsampler import BlockDownsampler
 from wsidicom.writing.encoder_pool import EncoderPool
 from wsidicom.writing.models import (
     DownsampleEncodeTask,
     EncodeTask,
     EncodingTaskResult,
     PyramidTilePosition,
+    RecodeTask,
 )
 
 
@@ -210,18 +212,22 @@ class TestMixedTaskPriorityQueue:
     """Regression: PriorityQueue must accept both task types without TypeError."""
 
     def test_encode_and_downsample_tasks_compare(
-        self, token: CancellationToken
+        self, decoy: Decoy, token: CancellationToken
     ) -> None:
         """EncodeTask and DownsampleEncodeTask with different coordinates compare."""
         # Arrange
+        encoder = decoy.mock(cls=Encoder)
         encode_task = EncodeTask(
             coordinates=PyramidTilePosition(0, 0, 0, 0, 0),
             tiles=[],
+            encoder=encoder,
             output_queue=PriorityCancelableQueue(),
         )
         downsample_task = DownsampleEncodeTask(
             coordinates=PyramidTilePosition(0, 1, 0, 0, 0),
             tiles=[],
+            encoder=encoder,
+            block_downsampler=decoy.mock(cls=BlockDownsampler),
             output_queue=PriorityCancelableQueue(),
             cascade_tracker=CompletionTracker(),
         )
@@ -238,17 +244,23 @@ class TestMixedTaskPriorityQueue:
         assert second is downsample_task
 
     def test_tasks_with_equal_coordinates_compare(
-        self, token: CancellationToken
+        self, decoy: Decoy, token: CancellationToken
     ) -> None:
         """Tasks with identical coordinates compare without TypeError."""
         # Arrange
+        encoder = decoy.mock(cls=Encoder)
         coords = PyramidTilePosition(0, 0, 0, 0, 0)
         encode_task = EncodeTask(
-            coordinates=coords, tiles=[], output_queue=PriorityCancelableQueue()
+            coordinates=coords,
+            tiles=[],
+            encoder=encoder,
+            output_queue=PriorityCancelableQueue(),
         )
         downsample_task = DownsampleEncodeTask(
             coordinates=coords,
             tiles=[],
+            encoder=encoder,
+            block_downsampler=decoy.mock(cls=BlockDownsampler),
             output_queue=PriorityCancelableQueue(),
             cascade_tracker=CompletionTracker(),
         )
@@ -292,17 +304,13 @@ class TestEncoderPool:
         task = EncodeTask(
             coordinates=coordinates,
             tiles=[test_tile],
+            encoder=encoder,
             output_queue=output_queue,
         )
 
         # Act
         with EncoderPool(
-            encoder,
             num_workers=1,
-            downsampler=downsampler,
-            stitcher=stitcher,
-            tile_size=tile_size,
-            blank_tile=blank_tile,
             token=token,
         ) as pool:
             pool.queue.put(task, token)
@@ -341,22 +349,19 @@ class TestEncoderPool:
         task_1 = EncodeTask(
             coordinates=coordinates,
             tiles=[test_tile_1],
+            encoder=encoder,
             output_queue=output_queue,
         )
         task_2 = EncodeTask(
             coordinates=coordinates,
             tiles=[test_tile_2],
+            encoder=encoder,
             output_queue=output_queue,
         )
 
         # Act
         with EncoderPool(
-            encoder,
             num_workers=1,
-            downsampler=downsampler,
-            stitcher=stitcher,
-            tile_size=tile_size,
-            blank_tile=blank_tile,
             token=token,
         ) as pool:
             pool.queue.put(task_1, token)
@@ -397,17 +402,13 @@ class TestEncoderPool:
         task = EncodeTask(
             coordinates=coordinates,
             tiles=tiles,
+            encoder=encoder,
             output_queue=output_queue,
         )
 
         # Act
         with EncoderPool(
-            encoder,
             num_workers=1,
-            downsampler=downsampler,
-            stitcher=stitcher,
-            tile_size=tile_size,
-            blank_tile=blank_tile,
             token=token,
         ) as pool:
             pool.queue.put(task, token)
@@ -430,14 +431,8 @@ class TestEncoderPool:
     ) -> None:
         """Test that starting twice raises an error."""
         # Arrange
-        encoder = decoy.mock(cls=Encoder)
         pool = EncoderPool(
-            encoder,
             num_workers=1,
-            downsampler=downsampler,
-            stitcher=stitcher,
-            tile_size=tile_size,
-            blank_tile=blank_tile,
             token=token,
         )
         pool.start()
@@ -472,17 +467,13 @@ class TestEncoderPool:
         task = EncodeTask(
             coordinates=coordinates,
             tiles=[test_tile],
+            encoder=encoder,
             output_queue=output_queue,
         )
 
         # Act
         with EncoderPool(
-            encoder,
             num_workers=1,
-            downsampler=downsampler,
-            stitcher=stitcher,
-            tile_size=tile_size,
-            blank_tile=blank_tile,
             token=token,
         ) as pool:
             pool.queue.put(task, token)
@@ -503,14 +494,8 @@ class TestEncoderPool:
     ) -> None:
         """Test that shutdown properly stops dispatcher and executor."""
         # Arrange
-        encoder = decoy.mock(cls=Encoder)
         pool = EncoderPool(
-            encoder,
             num_workers=4,
-            downsampler=downsampler,
-            stitcher=stitcher,
-            tile_size=tile_size,
-            blank_tile=blank_tile,
             token=token,
         )
         pool.start()
@@ -566,6 +551,10 @@ class TestEncoderPool:
         task = DownsampleEncodeTask(
             coordinates=coordinates,
             tiles=tiles,
+            encoder=encoder,
+            block_downsampler=BlockDownsampler(
+                downsampler, stitcher, Size(256, 256), blank_tile
+            ),
             output_queue=output_queue,
             cascade_tracker=tracker,
             cascade_queue=cascade_queue,
@@ -573,12 +562,7 @@ class TestEncoderPool:
 
         # Act
         with EncoderPool(
-            encoder,
             num_workers=1,
-            downsampler=downsampler,
-            stitcher=stitcher,
-            tile_size=Size(256, 256),
-            blank_tile=blank_tile,
             token=token,
         ) as pool:
             pool.queue.put(task, token)
@@ -635,6 +619,10 @@ class TestEncoderPool:
         task = DownsampleEncodeTask(
             coordinates=coordinates,
             tiles=tiles,
+            encoder=encoder,
+            block_downsampler=BlockDownsampler(
+                downsampler, stitcher, Size(256, 256), blank_tile
+            ),
             output_queue=output_queue,
             cascade_tracker=tracker,
             cascade_queue=None,
@@ -642,12 +630,7 @@ class TestEncoderPool:
 
         # Act
         with EncoderPool(
-            encoder,
             num_workers=1,
-            downsampler=downsampler,
-            stitcher=stitcher,
-            tile_size=Size(256, 256),
-            blank_tile=blank_tile,
             token=token,
         ) as pool:
             pool.queue.put(task, token)
@@ -695,6 +678,10 @@ class TestEncoderPool:
                 [np.zeros((256, 256, 3), dtype=dtype) for _ in range(2)]
                 for _ in range(2)
             ],
+            encoder=encoder,
+            block_downsampler=BlockDownsampler(
+                downsampler, stitcher, tile_size, blank_tile
+            ),
             output_queue=None,
             cascade_tracker=tracker,
             cascade_queue=cascade_queue,
@@ -702,12 +689,7 @@ class TestEncoderPool:
 
         # Act
         with EncoderPool(
-            encoder,
             num_workers=1,
-            downsampler=downsampler,
-            stitcher=stitcher,
-            tile_size=tile_size,
-            blank_tile=blank_tile,
             token=token,
         ) as pool:
             pool.queue.put(task, token)
@@ -751,18 +733,17 @@ class TestEncoderPool:
                 level=1, x_index=0, y_index=0, z_index=0, optical_path_index=0
             ),
             tiles=tiles,
+            encoder=encoder,
+            block_downsampler=BlockDownsampler(
+                PillowDownsampler(), NumpyStitcher(), tile_size, blank_tile
+            ),
             output_queue=output_queue,
             cascade_tracker=tracker,
         )
 
         # Act
         with EncoderPool(
-            encoder,
             num_workers=1,
-            downsampler=PillowDownsampler(),
-            stitcher=NumpyStitcher(),
-            tile_size=tile_size,
-            blank_tile=blank_tile,
             token=token,
         ) as pool:
             pool.queue.put(task, token)
@@ -812,6 +793,10 @@ class TestEncoderPool:
         task = DownsampleEncodeTask(
             coordinates=coordinates,
             tiles=tiles,
+            encoder=encoder,
+            block_downsampler=BlockDownsampler(
+                downsampler, stitcher, Size(256, 256), blank_tile
+            ),
             output_queue=output_queue,
             cascade_tracker=tracker,
             cascade_queue=None,
@@ -819,12 +804,7 @@ class TestEncoderPool:
 
         # Act
         with EncoderPool(
-            encoder,
             num_workers=1,
-            downsampler=downsampler,
-            stitcher=stitcher,
-            tile_size=Size(256, 256),
-            blank_tile=blank_tile,
             token=token,
         ) as pool:
             pool.queue.put(task, token)
@@ -836,3 +816,86 @@ class TestEncoderPool:
 
         # Assert - tracker still decremented (no leak)
         tracker.wait_for_zero()
+
+
+@pytest.mark.unittest
+class TestEncoderPoolRecode:
+    """Tests for recode tasks in EncoderPool."""
+
+    def test_recode_task_uses_recoder(
+        self,
+        decoy: Decoy,
+        downsampler: Downsampler,
+        stitcher: NumpyStitcher,
+        tile_size: Size,
+        blank_tile: np.ndarray,
+        token: CancellationToken,
+    ) -> None:
+        """Encoded tiles are recoded by the recoder, in order, without encoding."""
+        # Arrange
+        encoder = decoy.mock(cls=Encoder)
+        recoder = decoy.mock(cls=Recoder)
+        decoy.when(recoder.recode(b"tile_0")).then_return(b"recoded_0")
+        decoy.when(recoder.recode(b"tile_1")).then_return(b"recoded_1")
+        output_queue: PriorityCancelableQueue[EncodingTaskResult] = (
+            PriorityCancelableQueue()
+        )
+        coordinates = PyramidTilePosition(
+            level=0, x_index=0, y_index=0, z_index=0, optical_path_index=0
+        )
+        task = RecodeTask(
+            coordinates=coordinates,
+            tiles=[b"tile_0", b"tile_1"],
+            recoder=recoder,
+            output_queue=output_queue,
+        )
+
+        # Act
+        with EncoderPool(
+            num_workers=1,
+            token=token,
+        ) as pool:
+            pool.queue.put(task, token)
+
+        # Assert
+        result = output_queue.get(token)
+        assert result.coordinates == coordinates
+        assert result.tiles == [b"recoded_0", b"recoded_1"]
+        decoy.verify(encoder.encode(matchers.Anything()), times=0)
+
+    def test_recoder_failure_cancels_token(
+        self,
+        decoy: Decoy,
+        downsampler: Downsampler,
+        stitcher: NumpyStitcher,
+        tile_size: Size,
+        blank_tile: np.ndarray,
+        token: CancellationToken,
+    ) -> None:
+        """A tile the recoder can not recode cancels the token."""
+        # Arrange
+        recoder = decoy.mock(cls=Recoder)
+        decoy.when(recoder.recode(b"broken")).then_raise(ValueError("not a JPEG"))
+        output_queue: PriorityCancelableQueue[EncodingTaskResult] = (
+            PriorityCancelableQueue()
+        )
+        task = RecodeTask(
+            coordinates=PyramidTilePosition(
+                level=0, x_index=0, y_index=0, z_index=0, optical_path_index=0
+            ),
+            tiles=[b"broken"],
+            recoder=recoder,
+            output_queue=output_queue,
+        )
+
+        # Act
+        with EncoderPool(
+            num_workers=1,
+            token=token,
+        ) as pool:
+            pool.queue.put(task, token)
+
+        # Assert
+        assert token.is_cancelled() is True
+        assert isinstance(token.exception, ValueError)
+        assert output_queue.qsize() == 0

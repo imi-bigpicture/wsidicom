@@ -23,7 +23,7 @@ from collections.abc import Iterable, Sequence
 from concurrent.futures import Future
 from threading import Semaphore
 
-from wsidicom.codec.encoder import Encoder
+from wsidicom.codec import Encoder, Recoder
 from wsidicom.geometry import Point, Size
 from wsidicom.group import Instances
 from wsidicom.instance import ImageData
@@ -57,13 +57,35 @@ class GroupInstanceWriter:
         transcode: bool,
         focal_planes: Sequence[float],
         optical_paths: Sequence[str],
+        recoder: Recoder | None = None,
     ) -> None:
+        """Create a writer for one group instance.
+
+        Parameters
+        ----------
+        dataset: WsiDataset
+            Dataset of the instance.
+        instances: Instances
+            Source instances to read tiles from.
+        encoder: Encoder
+            Encoder to transcode tiles with, when `transcode`.
+        transcode: bool
+            If to decode and encode the tiles instead of copying them.
+        focal_planes: Sequence[float]
+            Focal planes of the instance.
+        optical_paths: Sequence[str]
+            Optical paths of the instance.
+        recoder: Recoder | None = None
+            If given, copied tiles are recoded with it. Not used when
+            `transcode`.
+        """
         self._dataset = dataset
         self._instances = instances
         self._encoder = encoder
         self._transcode = transcode
         self._focal_planes = focal_planes
         self._optical_paths = optical_paths
+        self._recoder = recoder
 
     @property
     def dataset(self) -> WsiDataset:
@@ -82,6 +104,9 @@ class GroupInstanceWriter:
             tiles = self._instances.iter_encoded_tiles(
                 self._focal_planes, self._optical_paths
             )
+            recoder = self._recoder
+            if recoder is not None:
+                tiles = (recoder.recode(tile) for tile in tiles)
         tile_writer.write_tiles(tiles)
 
 

@@ -19,7 +19,9 @@ from functools import total_ordering
 
 import numpy as np
 
+from wsidicom.codec import Encoder, Recoder
 from wsidicom.thread import CompletionTracker, WriteOnlyQueue
+from wsidicom.writing.block_downsampler import BlockDownsampler
 
 
 @dataclass(frozen=True)
@@ -144,11 +146,33 @@ class EncodeTask(CoordinatePriority):
     ----------
     tiles: List[np.ndarray]
         Decoded tiles to encode.
+    encoder: Encoder
+        Encoder to encode the tiles with.
     output_queue: WriteOnlyQueue[EncodingTaskResult]
         Queue to put the encoded result on.
     """
 
     tiles: list[np.ndarray] = field(compare=False)
+    encoder: Encoder = field(compare=False)
+    output_queue: WriteOnlyQueue[EncodingTaskResult] = field(compare=False)
+
+
+@dataclass(frozen=True)
+class RecodeTask(CoordinatePriority):
+    """Recode encoded tiles into other encoded tiles and submit the result.
+
+    Parameters
+    ----------
+    tiles: List[bytes]
+        Encoded tiles to recode.
+    recoder: Recoder
+        Recoder to recode the tiles with.
+    output_queue: WriteOnlyQueue[EncodingTaskResult]
+        Queue to put the recoded tiles on.
+    """
+
+    tiles: list[bytes] = field(compare=False)
+    recoder: Recoder = field(compare=False)
     output_queue: WriteOnlyQueue[EncodingTaskResult] = field(compare=False)
 
 
@@ -162,6 +186,10 @@ class DownsampleEncodeTask(CoordinatePriority):
     ----------
     tiles: List[List[np.ndarray]]
         Decoded tiles forming the input block, as a row-major 2D matrix.
+    block_downsampler: BlockDownsampler
+        Downsampler to downsample the block into one tile with.
+    encoder: Encoder
+        Encoder to encode the downsampled tile with.
     output_queue: Optional[WriteOnlyQueue[EncodingTaskResult]]
         Queue to put the encoded result on. None if this level produces no
         output: it is downsampled only to feed the cascade, and is not written.
@@ -173,6 +201,8 @@ class DownsampleEncodeTask(CoordinatePriority):
     """
 
     tiles: list[list[np.ndarray]] = field(compare=False)
+    block_downsampler: BlockDownsampler = field(compare=False)
+    encoder: Encoder = field(compare=False)
     output_queue: WriteOnlyQueue[EncodingTaskResult] | None = field(compare=False)
     cascade_tracker: CompletionTracker = field(compare=False)
     cascade_queue: WriteOnlyQueue[CascadedTile] | None = field(

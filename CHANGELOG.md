@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ImageData.get_tile_byte_ranges()` and `ImageData.get_frame_readers()`, for a source to tell where the encoded tiles of a plane are stored (a `TileByteRanges`) and to give a `FrameReader` for each file to read them with. Both return None by default, and the tiles are then read through the image data as before. Implemented for local DICOM files.
 - `WsiDataset.get_optical_path_dataset()` returns a copy of the Optical Path Sequence item of an optical path, and `Instances.get_optical_path_datasets()` those of several optical paths.
 - `Settings.max_file_handles_per_file` (default 8), the most handles open to a local file at once. A read beyond waits for a handle.
+- `JpegSettings(optimize=True)` encodes with Huffman tables optimized for each tile, which makes the files smaller.
+- Saving with `transcoding=JpegSettings(optimize=True)` also rewrites copied JPEG Baseline tiles with optimized Huffman tables, without changing their pixels.
 
 ### Changed
 

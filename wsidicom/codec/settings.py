@@ -250,6 +250,7 @@ class JpegSettings(Settings):
         bits: int = 8,
         channels: Channels = Channels.YBR,
         subsampling: Subsampling = Subsampling.R422,
+        optimize: bool = False,
     ) -> None:
         """
         Initialize JPEG encoding settings.
@@ -264,15 +265,21 @@ class JpegSettings(Settings):
                 Color channels in encoded image.
             subsampling: Subsampling = Subsampling.R420
                 Chroma subsampling settings.
+            optimize: bool = False
+                If to build Huffman tables optimal for each encoded image instead of
+                using the default tables. This makes the encoded images smaller
+                without changing their pixels, at the cost of slower encoding.
         """
         self._quality = quality
         self._subsampling = subsampling
+        self._optimize = optimize
         super().__init__(bits, channels)
 
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(quality={self.quality}, bits={self.bits}, "
-            f"channels={self.channels}, subsampling={self.subsampling})"
+            f"channels={self.channels}, subsampling={self.subsampling}, "
+            f"optimize={self.optimize})"
         )
 
     @property
@@ -284,6 +291,32 @@ class JpegSettings(Settings):
     def subsampling(self) -> Subsampling:
         """Return subsampling."""
         return self._subsampling
+
+    @property
+    def optimize(self) -> bool:
+        """Return if Huffman tables are optimized for each encoded image."""
+        return self._optimize
+
+    def with_optimize(self, optimize: bool) -> "JpegSettings":
+        """Return a copy of the settings with optimized Huffman tables set or not.
+
+        Parameters
+        ----------
+        optimize: bool
+            If to build Huffman tables optimal for each encoded image.
+
+        Returns
+        -------
+        JpegSettings
+            Settings equal to these except for `optimize`.
+        """
+        return JpegSettings(
+            quality=self.quality,
+            bits=self.bits,
+            channels=self.channels,
+            subsampling=self.subsampling,
+            optimize=optimize,
+        )
 
     @property
     def transfer_syntax(self) -> UID:

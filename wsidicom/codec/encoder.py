@@ -281,6 +281,7 @@ class PillowEncoder(Encoder[JpegSettings | Jpeg2kSettings]):
             self._pillow_settings = {
                 "quality": settings.quality,
                 "subsampling": subsampling,
+                "optimize": settings.optimize,
             }
             self._format = "jpeg"
         elif isinstance(settings, Jpeg2kSettings):
@@ -364,6 +365,7 @@ class JpegEncoder(Encoder[JpegSettings | JpegLosslessSettings]):
             self._lossless = False
             self._predictor = None
             self._level = settings.quality
+            self._optimize = settings.optimize
 
             self._subsampling = (
                 settings.subsampling.name.lstrip("R") if settings.subsampling else None
@@ -372,6 +374,7 @@ class JpegEncoder(Encoder[JpegSettings | JpegLosslessSettings]):
             self._lossless = True
             self._predictor = settings.predictor
             self._level = None
+            self._optimize = None
             self._subsampling = None
         else:
             raise ValueError(f"Unsupported encoder settings: {type(settings)}.")
@@ -393,6 +396,7 @@ class JpegEncoder(Encoder[JpegSettings | JpegLosslessSettings]):
                 subsampling=self._subsampling,
                 outcolorspace=self._output_colorspace,
                 predictor=self._predictor,
+                optimize=self._optimize,
             )
         )
 
