@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `WsiDicom.files` listed files left out for not belonging to the slide.
 - Files whose Extended Offset Table Lengths state an odd frame length failed to open with "Invalid frame length" (#240).
 - Extended Offset Table Lengths are written without the byte an odd frame is padded with, as the standard specifies.
+- Saving a pyramid level whose instances differ in transfer syntax, photometric interpretation, bits stored, extended depth of field or focus method wrote them into the same instance, described as the first of them. They are now written to separate instances. Labels and overviews whose instances differ only in bits stored are now also written to separate instances.
 - Encoding pixels that are not contiguous in memory, such as a tile decoded from RLE or a cropped tile, failed with the imagecodecs JPEG encoder and the pylibjpeg-openjpeg JPEG 2000 encoder. Transcoding RLE images to JPEG therefore failed.
 - Saving with `transcoding` a pyramid whose levels use different transfer syntaxes transcoded or copied every level as the base level was, so a level could be transcoded needlessly or left in another transfer syntax. Each level is now transcoded only if its own transfer syntax differs.
 - Saving a pyramid whose levels use different transfer syntaxes, without transcoding, wrote every level with the base level's transfer syntax, so the other levels were labelled with the wrong encoding.

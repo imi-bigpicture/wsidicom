@@ -24,7 +24,7 @@ from typing import Any, Never
 import pytest
 from decoy import Decoy, matchers
 from PIL import ImageChops, ImageFilter, ImageStat
-from pydicom.uid import JPEGBaseline8Bit, RLELossless
+from pydicom.uid import UID, JPEG2000Lossless, JPEGBaseline8Bit, RLELossless
 from upath import UPath
 
 from tests.conftest import WsiTestDefinitions
@@ -36,6 +36,8 @@ from wsidicom.file.file_writer import (
     PyramidFileWriter,
 )
 from wsidicom.geometry import Point
+from wsidicom.group import Instances
+from wsidicom.instance import ImageData, WsiInstance
 from wsidicom.metadata.uid_generator import UidGenerator
 from wsidicom.options import InstanceSplit
 from wsidicom.series import Pyramid
@@ -113,6 +115,136 @@ class TestPyramidFileWriterHelpers:
         with pytest.raises(ValueError, match="no level below it is read"):
             PyramidFileWriter._source_level_of(
                 3, 0, read_levels={4}, regenerate_pyramid=False
+            )
+
+
+@pytest.mark.unittest
+class TestBaseFileWriterPartition:
+    """Tests for `BaseFileWriter._partition_by_shared_instance_properties`."""
+
+    @staticmethod
+    def create_instances(
+        decoy: Decoy,
+        transfer_syntaxes: dict[tuple[str, float], UID],
+    ) -> Instances:
+        """Return mocked instances holding the planes and paths given.
+
+        Each (optical path, focal plane) is held by an instance with the transfer
+        syntax given, and otherwise the same file properties.
+        """
+        instances = decoy.mock(cls=Instances)
+        focal_planes_by_optical_path: dict[str, list[float]] = {}
+        for (optical_path, focal_plane), transfer_syntax in sorted(
+            transfer_syntaxes.items()
+        ):
+            focal_planes_by_optical_path.setdefault(optical_path, []).append(
+                focal_plane
+            )
+            image_data = decoy.mock(cls=ImageData)
+            decoy.when(image_data.photometric_interpretation).then_return("RGB")
+            decoy.when(image_data.bits).then_return(8)
+            decoy.when(image_data.transfer_syntax).then_return(transfer_syntax)
+            instance = decoy.mock(cls=WsiInstance)
+            decoy.when(instance.image_data).then_return(image_data)
+            decoy.when(instance.ext_depth_of_field).then_return(False)
+            decoy.when(instance.ext_depth_of_field_planes).then_return(None)
+            decoy.when(instance.ext_depth_of_field_plane_distance).then_return(None)
+            decoy.when(instance.focus_method).then_return("AUTO")
+            decoy.when(instances.instance_at(optical_path, focal_plane)).then_return(
+                instance
+            )
+        decoy.when(instances.focal_planes_by_optical_path).then_return(
+            focal_planes_by_optical_path
+        )
+        return instances
+
+    def test_same_transfer_syntax_gives_one_partition(self, decoy: Decoy) -> None:
+        # Arrange
+        instances = self.create_instances(
+            decoy,
+            {
+                ("0", 0.0): JPEGBaseline8Bit,
+                ("0", 1.0): JPEGBaseline8Bit,
+                ("1", 0.0): JPEGBaseline8Bit,
+                ("1", 1.0): JPEGBaseline8Bit,
+            },
+        )
+        writer = SplitOnlyWriter(InstanceSplit.NONE)
+
+        # Act
+        partitions = writer._partition_by_shared_instance_properties(instances)
+
+        # Assert
+        assert partitions == [{"0": [0.0, 1.0], "1": [0.0, 1.0]}]
+
+    def test_optical_paths_in_different_transfer_syntaxes_are_partitioned(
+        self, decoy: Decoy
+    ) -> None:
+        # Arrange
+        instances = self.create_instances(
+            decoy,
+            {("0", 0.0): JPEGBaseline8Bit, ("1", 0.0): JPEG2000Lossless},
+        )
+        writer = SplitOnlyWriter(InstanceSplit.NONE)
+
+        # Act
+        partitions = writer._partition_by_shared_instance_properties(instances)
+
+        # Assert
+        assert partitions == [{"0": [0.0]}, {"1": [0.0]}]
+
+    def test_focal_planes_in_different_transfer_syntaxes_are_partitioned(
+        self, decoy: Decoy
+    ) -> None:
+        # Arrange
+        instances = self.create_instances(
+            decoy,
+            {
+                ("0", 0.0): JPEGBaseline8Bit,
+                ("0", 1.0): JPEG2000Lossless,
+                ("0", 2.0): JPEGBaseline8Bit,
+            },
+        )
+        writer = SplitOnlyWriter(InstanceSplit.NONE)
+
+        # Act
+        partitions = writer._partition_by_shared_instance_properties(instances)
+
+        # Assert
+        assert partitions == [{"0": [0.0, 2.0]}, {"0": [1.0]}]
+
+    def test_each_bucket_of_a_mixed_level_has_one_transfer_syntax(
+        self, decoy: Decoy
+    ) -> None:
+        # Arrange
+        transfer_syntaxes = {
+            ("0", 0.0): JPEGBaseline8Bit,
+            ("0", 1.0): JPEGBaseline8Bit,
+            ("1", 0.0): JPEG2000Lossless,
+            ("1", 1.0): JPEG2000Lossless,
+        }
+        instances = self.create_instances(decoy, transfer_syntaxes)
+        writer = SplitOnlyWriter(InstanceSplit.NONE)
+
+        # Act
+        buckets = [
+            bucket
+            for partition in writer._partition_by_shared_instance_properties(instances)
+            for bucket in writer._split_planes_paths(partition)
+        ]
+
+        # Assert
+        assert buckets == [([0.0, 1.0], ["0"]), ([0.0, 1.0], ["1"])]
+        for focal_planes, optical_paths in buckets:
+            assert (
+                len(
+                    {
+                        transfer_syntaxes[(optical_path, focal_plane)]
+                        for optical_path in optical_paths
+                        for focal_plane in focal_planes
+                    }
+                )
+                == 1
             )
 
 

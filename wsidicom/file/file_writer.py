@@ -322,6 +322,58 @@ class WrittenPart:
 
 
 @dataclass(frozen=True)
+class SharedInstanceProperties:
+    """Properties that the source instances written to one instance must share.
+
+    They are set once for a DICOM instance, also when it is split into
+    concatenated files, so sources that differ in them are written to separate
+    instances.
+    """
+
+    photometric_interpretation: str
+    """Photometric interpretation of the image data."""
+    bits: int
+    """Bits stored of the image data."""
+    transfer_syntax: UID
+    """Transfer syntax of the image data."""
+    ext_depth_of_field: bool
+    """If the instance has extended depth of field."""
+    ext_depth_of_field_planes: int | None
+    """Number of focal planes combined for the extended depth of field."""
+    ext_depth_of_field_plane_distance: float | None
+    """Distance between the focal planes combined for the extended depth of
+    field."""
+    focus_method: str
+    """Focus method of the instance."""
+
+    @classmethod
+    def from_instance(cls, instance: WsiInstance) -> "SharedInstanceProperties":
+        """Return the shared instance properties of an instance.
+
+        Parameters
+        ----------
+        instance: WsiInstance
+            Instance to get the properties of.
+
+        Returns
+        -------
+        SharedInstanceProperties
+            The shared instance properties of the instance.
+        """
+        return cls(
+            photometric_interpretation=instance.image_data.photometric_interpretation,
+            bits=instance.image_data.bits,
+            transfer_syntax=instance.image_data.transfer_syntax,
+            ext_depth_of_field=instance.ext_depth_of_field,
+            ext_depth_of_field_planes=instance.ext_depth_of_field_planes,
+            ext_depth_of_field_plane_distance=(
+                instance.ext_depth_of_field_plane_distance
+            ),
+            focus_method=instance.focus_method,
+        )
+
+
+@dataclass(frozen=True)
 class EncodedLevelWriter:
     """A writer for a pyramid level, and how the tiles it writes are encoded."""
 
@@ -734,6 +786,40 @@ class BaseFileWriter(metaclass=ABCMeta):
             return OffsetTableType.BASIC
         return OffsetTableType.NONE
 
+    def _partition_by_shared_instance_properties(
+        self, instances: Instances
+    ) -> list[dict[str, list[float]]]:
+        """Partition the focal planes of each optical path by shared properties.
+
+        The focal planes and optical paths of instances with the same shared
+        instance properties, such as the transfer syntax, are put in the same
+        partition, so that each partition can be split into instances to write.
+
+        Parameters
+        ----------
+        instances: Instances
+            Instances holding the focal planes and optical paths.
+
+        Returns
+        -------
+        list[dict[str, list[float]]]
+            For each partition, the focal planes of each of its optical paths, in
+            ascending order.
+        """
+        partitions: dict[SharedInstanceProperties, dict[str, list[float]]] = {}
+        for (
+            optical_path,
+            focal_planes,
+        ) in instances.focal_planes_by_optical_path.items():
+            for focal_plane in focal_planes:
+                properties = SharedInstanceProperties.from_instance(
+                    instances.instance_at(optical_path, focal_plane)
+                )
+                partitions.setdefault(properties, {}).setdefault(
+                    optical_path, []
+                ).append(focal_plane)
+        return list(partitions.values())
+
     def _split_planes_paths(
         self,
         focal_planes_by_optical_path: dict[str, list[float]],
@@ -1125,24 +1211,25 @@ class PyramidFileWriter(BaseFileWriter):
                 if read_level <= level_index < next_read_level
             ]
             source_group = self._pyramid.get(read_level)
-            for planes, paths in self._split_planes_paths(
-                source_group.focal_planes_by_optical_path
+            for partition in self._partition_by_shared_instance_properties(
+                source_group
             ):
-                level_writers.extend(
-                    self._build_bucket_chain(
-                        segment_levels=segment_levels,
-                        read_level=read_level,
-                        source_group=source_group,
-                        planes=planes,
-                        paths=paths,
-                        included_levels=included_levels,
-                        read_levels=read_levels,
-                        block_downsampler=block_downsampler,
-                        encoder_pool=encoder_pool,
-                        tile_cache=tile_cache,
-                        token=token,
+                for planes, paths in self._split_planes_paths(partition):
+                    level_writers.extend(
+                        self._build_bucket_chain(
+                            segment_levels=segment_levels,
+                            read_level=read_level,
+                            source_group=source_group,
+                            planes=planes,
+                            paths=paths,
+                            included_levels=included_levels,
+                            read_levels=read_levels,
+                            block_downsampler=block_downsampler,
+                            encoder_pool=encoder_pool,
+                            tile_cache=tile_cache,
+                            token=token,
+                        )
                     )
-                )
 
         return level_writers
 
@@ -1768,7 +1855,7 @@ class GroupFileWriter(BaseFileWriter):
     def _group_instances_to_file(
         group: Label | Overview | Thumbnail,
     ) -> list[list[WsiInstance]]:
-        """Group instances by properties that can't differ in a DICOM-file.
+        """Group instances by properties they must share to be written to one instance.
 
         Parameters
         ----------
@@ -1780,18 +1867,7 @@ class GroupFileWriter(BaseFileWriter):
         List[List[WsiInstance]]
             Instances grouped by common properties.
         """
-        groups: dict[
-            tuple[str, UID, bool, int | None, float | None, str],
-            list[WsiInstance],
-        ] = defaultdict(list)
-
+        groups: dict[SharedInstanceProperties, list[WsiInstance]] = defaultdict(list)
         for instance in group.instances.values():
-            groups[
-                instance.image_data.photometric_interpretation,
-                instance.image_data.transfer_syntax,
-                instance.ext_depth_of_field,
-                instance.ext_depth_of_field_planes,
-                instance.ext_depth_of_field_plane_distance,
-                instance.focus_method,
-            ].append(instance)
+            groups[SharedInstanceProperties.from_instance(instance)].append(instance)
         return list(groups.values())
