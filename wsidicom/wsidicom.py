@@ -676,7 +676,7 @@ class WsiDicom:
         with ReadExecutor() as executor:
             array = label.get_default_full(executor=executor)
         if as_array:
-            return array
+            return self._to_array(array)
         return self._to_image(array)
 
     @overload
@@ -715,7 +715,7 @@ class WsiDicom:
         with ReadExecutor() as executor:
             array = overview.get_default_full(executor=executor)
         if as_array:
-            return array
+            return self._to_array(array)
         return self._to_image(array)
 
     @overload
@@ -802,7 +802,7 @@ class WsiDicom:
         with ReadExecutor(threads, self._read_executor) as executor:
             array = thumbnail.get_thumbnail(thumbnail_size, z, path, executor=executor)
         if as_array:
-            return array
+            return self._to_array(array)
         return self._to_image(array)
 
     @overload
@@ -897,7 +897,7 @@ class WsiDicom:
                 executor=executor,
             )
         if as_array:
-            return array
+            return self._to_array(array)
         return self._to_image(array)
 
     @overload
@@ -991,7 +991,7 @@ class WsiDicom:
                 executor=executor,
             )
         if as_array:
-            return array
+            return self._to_array(array)
         return self._to_image(array)
 
     @overload
@@ -1087,7 +1087,7 @@ class WsiDicom:
                 executor=executor,
             )
         if as_array:
-            return array
+            return self._to_array(array)
         return self._to_image(array)
 
     @overload
@@ -1172,7 +1172,7 @@ class WsiDicom:
                     executor=executor,
                 )
         if as_array:
-            return array
+            return self._to_array(array)
         return self._to_image(array)
 
     def read_encoded_tile(
@@ -1280,6 +1280,17 @@ class WsiDicom:
     def resize_cache(self, size: int) -> None:
         """Resize cache of encoded and decoded tiles."""
         self._source.resize_cache(size)
+
+    @staticmethod
+    def _to_array(pixels: np.ndarray) -> np.ndarray:
+        """Return read pixels as a read-only array.
+
+        The pixels can be those of a cached tile, so they are given read-only,
+        whether or not they are.
+        """
+        array = pixels.view()
+        array.flags.writeable = False
+        return array
 
     @staticmethod
     def _to_image(pixels: np.ndarray) -> Image:
