@@ -389,7 +389,8 @@ class JpegEncoder(Encoder[JpegSettings | JpegLosslessSettings]):
             raise RuntimeError("Image codecs not available.")
         return bytes(
             jpeg_encode(
-                np.array(pixels).astype(self._dtype),
+                # The encoder needs C-contiguous pixels.
+                np.ascontiguousarray(pixels, dtype=self._dtype),
                 level=self._level,
                 lossless=self._lossless,
                 bitspersample=self._bits,
@@ -735,7 +736,8 @@ class PyLibJpegOpenJpegEncoder(Encoder[Jpeg2kSettings]):
         if not self.is_available():
             raise RuntimeError("Pylibjpeg-openjpeg not available.")
         return pylibjpeg_openjpeg_encode(
-            np.asarray(pixels),
+            # The encoder needs C-contiguous pixels.
+            np.ascontiguousarray(pixels),
             self.bits,
             self._color_space,
             self._multiple_component_transform,
