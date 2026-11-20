@@ -25,12 +25,7 @@ from pydicom.dataset import FileMetaDataset
 from pydicom.tag import Tag
 from upath import UPath
 
-from tests.data_gen import (
-    TESTFRAME,
-    create_layer_file,
-    create_main_dataset,
-    create_meta_dataset,
-)
+from tests.conftest import create_layer_file
 from wsidicom.errors import WsiDicomError, WsiDicomOutOfBoundsError
 from wsidicom.file.io import OffsetTableType, WsiDicomReader
 from wsidicom.file.io.wsidicom_io import WsiDicomReadIO
@@ -67,30 +62,34 @@ FILE_SETTINGS = {
 
 
 @pytest.fixture
-def meta_dataset() -> FileMetaDataset:
-    return create_meta_dataset()
+def name() -> str:
+    """Return the key of the file settings to write the test file with."""
+    return "sparse_with_bot"
 
 
 @pytest.fixture
-def padded_test_frame() -> bytes:
-    return TESTFRAME + b"\x00" * (len(TESTFRAME) % 2)
+def tile_type(name: str) -> TileType:
+    return FILE_SETTINGS[name]["tile_type"]
 
 
 @pytest.fixture
-def dataset(name: str) -> Dataset:
-    file_setting = FILE_SETTINGS[name]
-    dataset = create_main_dataset(file_setting["tile_type"], file_setting["bot_type"])
-    return dataset
+def offset_table(name: str) -> OffsetTableType:
+    return FILE_SETTINGS[name]["bot_type"]
+
+
+@pytest.fixture
+def padded_test_frame(test_frame: bytes) -> bytes:
+    return test_frame + b"\x00" * (len(test_frame) % 2)
 
 
 @pytest.fixture
 def test_file(
-    name: str, dataset: Dataset, meta_dataset: FileMetaDataset
+    name: str, main_dataset_with_pixel_data: Dataset, meta_dataset: FileMetaDataset
 ) -> Iterator[WsiDicomReader]:
     file_setting = FILE_SETTINGS[name]
     with TemporaryDirectory() as tempdir:
         path = Path(tempdir).joinpath(file_setting["name"])
-        create_layer_file(path, dataset, meta_dataset)
+        create_layer_file(path, main_dataset_with_pixel_data, meta_dataset)
         reader = WsiDicomReader(WsiDicomReadIO(open(path, "rb"), filepath=UPath(path)))
         yield reader
         reader.close()
@@ -98,16 +97,16 @@ def test_file(
 
 @pytest.fixture
 def file_with_element_after_sequence(
-    name: str, dataset: Dataset, meta_dataset: FileMetaDataset
+    name: str, main_dataset_with_pixel_data: Dataset, meta_dataset: FileMetaDataset
 ) -> Iterator[WsiDicomReader]:
     """Return a file with an element between the per frame sequence and pixel data.
 
     The read of the dataset has to pick that element up rather than stop at it.
     """
-    dataset.add_new(TAG_AFTER_SEQUENCE, "LO", "After the sequence")
+    main_dataset_with_pixel_data.add_new(TAG_AFTER_SEQUENCE, "LO", "After the sequence")
     with TemporaryDirectory() as tempdir:
         path = Path(tempdir).joinpath(FILE_SETTINGS[name]["name"])
-        create_layer_file(path, dataset, meta_dataset)
+        create_layer_file(path, main_dataset_with_pixel_data, meta_dataset)
         reader = WsiDicomReader(WsiDicomReadIO(open(path, "rb"), filepath=UPath(path)))
         yield reader
         reader.close()
@@ -115,6 +114,7 @@ def file_with_element_after_sequence(
 
 @pytest.fixture
 def file_with_unreadable_sequence(
+    main_dataset_with_pixel_data: Dataset,
     meta_dataset: FileMetaDataset,
 ) -> Iterator[WsiDicomReader]:
     """Return a file whose per frame sequence cannot be read without parsing it.
@@ -122,7 +122,7 @@ def file_with_unreadable_sequence(
     It holds more items than the instance has frames, so the positions cannot be
     matched to frames.
     """
-    dataset = create_main_dataset(TileType.SPARSE, OffsetTableType.BASIC)
+    dataset = main_dataset_with_pixel_data
     dataset.PerFrameFunctionalGroupsSequence.append(
         deepcopy(dataset.PerFrameFunctionalGroupsSequence[0])
     )
@@ -136,13 +136,14 @@ def file_with_unreadable_sequence(
 
 @pytest.fixture
 def file_without_sequence_with_element_after_it(
+    main_dataset_with_pixel_data: Dataset,
     meta_dataset: FileMetaDataset,
 ) -> Iterator[WsiDicomReader]:
     """Return the same, for a file with no per frame sequence at all.
 
     There the read stops at the element itself rather than at the sequence.
     """
-    dataset = create_main_dataset(TileType.FULL, OffsetTableType.BASIC)
+    dataset = main_dataset_with_pixel_data
     del dataset[PerFrameFunctionalGroupsSequenceTag]
     dataset.add_new(TAG_AFTER_SEQUENCE, "LO", "After the sequence")
     with TemporaryDirectory() as tempdir:
@@ -167,6 +168,7 @@ SEQUENCES_WRITTEN_WITHOUT_A_LENGTH = (
 
 @pytest.fixture
 def file_with_sequences_without_a_length(
+    main_dataset_with_pixel_data: Dataset,
     meta_dataset: FileMetaDataset,
 ) -> Iterator[tuple[WsiDicomReader, Path]]:
     """Return a file with undefined length sequences, which can be stepped over.
@@ -174,7 +176,7 @@ def file_with_sequences_without_a_length(
     Also with an ICC profile large enough to be deferred, so that both kinds of
     deferred element are in play.
     """
-    dataset = create_main_dataset(TileType.FULL, OffsetTableType.BASIC)
+    dataset = main_dataset_with_pixel_data
     for keyword in SEQUENCES_WRITTEN_WITHOUT_A_LENGTH:
         dataset[Tag(keyword)].is_undefined_length = True
     dataset.OpticalPathSequence[0].ICCProfile = bytes(
@@ -189,6 +191,7 @@ def file_with_sequences_without_a_length(
 
 
 @pytest.mark.unittest
+@pytest.mark.parametrize("name", ["full_with_bot"])
 class TestSteppingOverSequences:
     def test_the_sequences_opening_does_not_read_are_stepped_over(
         self, file_with_sequences_without_a_length: tuple[WsiDicomReader, Path]
@@ -215,13 +218,13 @@ class TestSteppingOverSequences:
         }
 
     def test_a_sequence_that_cannot_be_walked_is_read_instead(
-        self, meta_dataset: FileMetaDataset
+        self, main_dataset_with_pixel_data: Dataset, meta_dataset: FileMetaDataset
     ) -> None:
         """A sequence that cannot be stepped over is read by pydicom instead."""
         # Arrange
         # An item delimiter where an item belongs, which pydicom reads as an empty
         # item but the walker rejects.
-        dataset = create_main_dataset(TileType.FULL, OffsetTableType.BASIC)
+        dataset = main_dataset_with_pixel_data
         dataset[Tag("SpecimenDescriptionSequence")].is_undefined_length = True
         with TemporaryDirectory() as tempdir:
             path = Path(tempdir).joinpath("unwalkable.dcm")
@@ -316,11 +319,11 @@ class TestSteppingOverSequences:
             assert Tag(keyword) in completed
 
     def test_a_stepped_over_sequence_is_read_back_in_the_character_set(
-        self, meta_dataset: FileMetaDataset
+        self, main_dataset_with_pixel_data: Dataset, meta_dataset: FileMetaDataset
     ) -> None:
         """A value in a stepped over sequence is decoded with the character set."""
         # Arrange
-        dataset = create_main_dataset(TileType.FULL, OffsetTableType.BASIC)
+        dataset = main_dataset_with_pixel_data
         dataset.SpecificCharacterSet = "ISO_IR 100"
         dataset.SpecimenDescriptionSequence[0].SpecimenIdentifier = "Spécimen"
         dataset[Tag("SpecimenDescriptionSequence")].is_undefined_length = True
@@ -383,7 +386,7 @@ class TestSteppingOverSequences:
         assert pixel_spacing is not None
 
     def test_a_sequence_after_where_the_per_frame_sequence_belongs_is_stepped_over(
-        self, meta_dataset: FileMetaDataset
+        self, main_dataset_with_pixel_data: Dataset, meta_dataset: FileMetaDataset
     ) -> None:
         """The read on to the pixel data steps over sequences too.
 
@@ -393,7 +396,7 @@ class TestSteppingOverSequences:
         # A private sequence ordered after the per frame functional groups sequence,
         # as in a file from PixelMed.
         private_sequence_tag = Tag(0x7FDF, 0x1001)
-        dataset = create_main_dataset(TileType.FULL, OffsetTableType.BASIC)
+        dataset = main_dataset_with_pixel_data
         del dataset[PerFrameFunctionalGroupsSequenceTag]
         item = Dataset()
         item.PatientID = "In a private sequence"
@@ -631,6 +634,7 @@ class TestWWsiDicomReader:
         # Assert
         assert frame == padded_test_frame
 
+    @pytest.mark.parametrize("name", ["full_with_bot"])
     def test_element_after_missing_sequence_is_read(
         self, file_without_sequence_with_element_after_it: WsiDicomReader
     ) -> None:
@@ -647,6 +651,7 @@ class TestWWsiDicomReader:
         # Assert
         assert dataset[TAG_AFTER_SEQUENCE].value == "After the sequence"
 
+    @pytest.mark.parametrize("name", ["full_with_bot"])
     def test_element_after_missing_sequence_leaves_pixel_data_findable(
         self,
         file_without_sequence_with_element_after_it: WsiDicomReader,
@@ -675,8 +680,11 @@ class TestWWsiDicomReader:
         assert image_type == ImageType.VOLUME
 
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
-    def test_uids_property(self, test_file: WsiDicomReader, dataset: Dataset) -> None:
+    def test_uids_property(
+        self, test_file: WsiDicomReader, main_dataset_with_pixel_data: Dataset
+    ) -> None:
         # Arrange
+        dataset = main_dataset_with_pixel_data
 
         # Act
         uids = test_file.uids

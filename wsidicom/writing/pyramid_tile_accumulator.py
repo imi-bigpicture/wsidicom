@@ -20,6 +20,7 @@ from typing import Optional
 
 import numpy as np
 
+from wsidicom.codec import Encoder
 from wsidicom.geometry import Size
 from wsidicom.thread import (
     CancellationToken,
@@ -31,6 +32,7 @@ from wsidicom.thread import (
     ShutdownSentinel,
     WriteOnlyQueue,
 )
+from wsidicom.writing.block_downsampler import BlockDownsampler
 from wsidicom.writing.models import (
     CascadedTile,
     DownsampleEncodeTask,
@@ -94,6 +96,8 @@ class PyramidTileAccumulator:
         ) = None,
         queue_maxsize: int = 100,
         *,
+        block_downsampler: BlockDownsampler,
+        encoder: Encoder,
         token: CancellationToken,
     ) -> None:
         """Create an accumulator for one generated pyramid level.
@@ -121,6 +125,10 @@ class PyramidTileAccumulator:
             and cascaded but never encoded.
         queue_maxsize: int
             Maximum size of the internal input queue. Provides backpressure.
+        block_downsampler: BlockDownsampler
+            Downsampler the blocks are downsampled with.
+        encoder: Encoder
+            Encoder the downsampled blocks are encoded with.
         token: CancellationToken
             Shared cancellation token for fail-fast teardown. The consumer
             cancels it if it fails, and all blocking queue operations observe
@@ -129,6 +137,8 @@ class PyramidTileAccumulator:
         self._level_index = level_index
         self._input_tiled_size = input_tiled_size
         self._encoder_pool_queue = encoder_pool_queue
+        self._block_downsampler = block_downsampler
+        self._encoder = encoder
         self._next = next_accumulator
         self._is_chain_start = is_chain_start
         self._token = token
@@ -308,6 +318,8 @@ class PyramidTileAccumulator:
             DownsampleEncodeTask(
                 coordinates=coords,
                 tiles=block_tiles,
+                block_downsampler=self._block_downsampler,
+                encoder=self._encoder,
                 output_queue=self._output_queue,
                 cascade_tracker=self._cascade_tracker,
                 cascade_queue=self._cascade_queue,
@@ -353,6 +365,8 @@ class WritingPyramidTileAccumulator(PyramidTileAccumulator):
         is_chain_start: bool = False,
         queue_maxsize: int = 100,
         *,
+        block_downsampler: BlockDownsampler,
+        encoder: Encoder,
         token: CancellationToken,
     ) -> None:
         """Create an accumulator for one written pyramid level.
@@ -371,6 +385,8 @@ class WritingPyramidTileAccumulator(PyramidTileAccumulator):
             is_chain_start=is_chain_start,
             output_queue=output_queue,
             queue_maxsize=queue_maxsize,
+            block_downsampler=block_downsampler,
+            encoder=encoder,
             token=token,
         )
 

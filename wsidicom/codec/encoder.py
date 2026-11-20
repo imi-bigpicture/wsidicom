@@ -281,6 +281,7 @@ class PillowEncoder(Encoder[JpegSettings | Jpeg2kSettings]):
             self._pillow_settings = {
                 "quality": settings.quality,
                 "subsampling": subsampling,
+                "optimize": settings.optimize,
             }
             self._format = "jpeg"
         elif isinstance(settings, Jpeg2kSettings):
@@ -364,6 +365,7 @@ class JpegEncoder(Encoder[JpegSettings | JpegLosslessSettings]):
             self._lossless = False
             self._predictor = None
             self._level = settings.quality
+            self._optimize = settings.optimize
 
             self._subsampling = (
                 settings.subsampling.name.lstrip("R") if settings.subsampling else None
@@ -372,6 +374,7 @@ class JpegEncoder(Encoder[JpegSettings | JpegLosslessSettings]):
             self._lossless = True
             self._predictor = settings.predictor
             self._level = None
+            self._optimize = None
             self._subsampling = None
         else:
             raise ValueError(f"Unsupported encoder settings: {type(settings)}.")
@@ -386,13 +389,15 @@ class JpegEncoder(Encoder[JpegSettings | JpegLosslessSettings]):
             raise RuntimeError("Image codecs not available.")
         return bytes(
             jpeg_encode(
-                np.array(pixels).astype(self._dtype),
+                # The encoder needs C-contiguous pixels.
+                np.ascontiguousarray(pixels, dtype=self._dtype),
                 level=self._level,
                 lossless=self._lossless,
                 bitspersample=self._bits,
                 subsampling=self._subsampling,
                 outcolorspace=self._output_colorspace,
                 predictor=self._predictor,
+                optimize=self._optimize,
             )
         )
 
@@ -731,7 +736,8 @@ class PyLibJpegOpenJpegEncoder(Encoder[Jpeg2kSettings]):
         if not self.is_available():
             raise RuntimeError("Pylibjpeg-openjpeg not available.")
         return pylibjpeg_openjpeg_encode(
-            np.asarray(pixels),
+            # The encoder needs C-contiguous pixels.
+            np.ascontiguousarray(pixels),
             self.bits,
             self._color_space,
             self._multiple_component_transform,

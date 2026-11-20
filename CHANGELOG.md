@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ImageData.get_tile_byte_ranges()` and `ImageData.get_frame_readers()`, for a source to tell where the encoded tiles of a plane are stored (a `TileByteRanges`) and to give a `FrameReader` for each file to read them with. Both return None by default, and the tiles are then read through the image data as before. Implemented for local DICOM files.
 - `WsiDataset.get_optical_path_dataset()` returns a copy of the Optical Path Sequence item of an optical path, and `Instances.get_optical_path_datasets()` those of several optical paths.
 - `Settings.max_file_handles_per_file` (default 8), the most handles open to a local file at once. A read beyond waits for a handle.
+- `JpegSettings(optimize=True)` encodes with Huffman tables optimized for each tile, which makes the files smaller.
+- Saving with `transcoding=JpegSettings(optimize=True)` also rewrites copied JPEG Baseline tiles with optimized Huffman tables, without changing their pixels.
 
 ### Changed
 
@@ -24,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `WsiDicom.read_encoded_tile()` reads a tile of a local DICOM file with a single read at its byte range, instead of through the level, instance and image data. Tiles to be cropped are read as before. Local files are read through a pool of file handles, so reads from several threads no longer wait for each other.
 - Only DICOMweb instances cache encoded frames. `Settings.encoded_frame_cache_size` is renamed `web_encoded_frame_cache_size`.
 - Assembling a region from tiles moved from `WsiInstance.get_region()` to `ImageData.get_decoded_region()`, which image data can override for more efficient reading.
+- Saving with `transcoding`, the levels generated from a level that is copied are encoded with the transcoding settings rather than with the encoding of the source, if those settings can encode its pixels.
+- Arrays read with `as_array=True` are read-only. They could share memory with a cached tile, so writing into one changed what later reads returned. Copy the array to modify it.
+- `save()` takes `transcoding_mode` instead of `force_transcoding`. `TranscodingMode.ALWAYS` replaces `force_transcoding=True`, and the new `TranscodingMode.WHEN_REQUIRED` transcodes only images that must be encoded, copying the others in their own transfer syntax.
 
 ### Removed
 
@@ -36,6 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `WsiDicom.files` listed files left out for not belonging to the slide.
 - Files whose Extended Offset Table Lengths state an odd frame length failed to open with "Invalid frame length" (#240).
 - Extended Offset Table Lengths are written without the byte an odd frame is padded with, as the standard specifies.
+- Saving a pyramid level whose instances differ in transfer syntax, photometric interpretation, bits stored, extended depth of field or focus method wrote them into the same instance, described as the first of them. They are now written to separate instances. Labels and overviews whose instances differ only in bits stored are now also written to separate instances.
+- Encoding pixels that are not contiguous in memory, such as a tile decoded from RLE or a cropped tile, failed with the imagecodecs JPEG encoder and the pylibjpeg-openjpeg JPEG 2000 encoder. Transcoding RLE images to JPEG therefore failed.
+- Saving with `transcoding` a pyramid whose levels use different transfer syntaxes transcoded or copied every level as the base level was, so a level could be transcoded needlessly or left in another transfer syntax. Each level is now transcoded only if its own transfer syntax differs.
+- Levels generated when saving from a level that is copied rather than transcoded kept the lossy compression ratio and method of that level, though their tiles are downsampled and encoded again. They now state their own.
 - Saving a pyramid whose levels use different transfer syntaxes, without transcoding, wrote every level with the base level's transfer syntax, so the other levels were labelled with the wrong encoding.
 - Code values that Code Value (SH, at most 16 characters) cannot hold, such as SNOMED CT extension concept ids or URN and URL codes, are written as Long Code Value or URN Code Value. Previously such a code made writing metadata fail, and a graphical annotation wrote it as an invalid Code Value. Codes are also read from whichever of the three attributes holds the value, so codes with only Long Code Value or URN Code Value no longer fail to read.
 - Reading a tile one past the last column or row served another tile instead of raising `WsiDicomOutOfBoundsError`.

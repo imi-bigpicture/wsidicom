@@ -15,15 +15,24 @@
 from collections.abc import Callable
 from pathlib import Path
 
+import numpy as np
 import pytest
 from PIL import ImageChops, ImageFilter, ImageStat
+from pydicom.uid import JPEGBaseline8Bit
 
 from tests.conftest import WsiTestDefinitions
 from wsidicom import WsiDicom
-from wsidicom.codec import Jpeg2kSettings, JpegSettings, Settings
-from wsidicom.codec.encoder import Encoder
+from wsidicom.codec import (
+    Encoder,
+    Jpeg2kSettings,
+    JpegSettings,
+    Settings,
+)
+from wsidicom.codec.recoder import JpegOptimizer
 from wsidicom.file import OffsetTableType, WsiDicomFileTarget
+from wsidicom.geometry import Point
 from wsidicom.metadata.uid_generator import CallableUidGenerator
+from wsidicom.options import TranscodingMode
 from wsidicom.series import Pyramid, Pyramids
 
 
@@ -90,14 +99,14 @@ class TestWsiDicomFileTargetIntegration:
 
     @pytest.mark.parametrize("settings", [Jpeg2kSettings(), JpegSettings()])
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
-    @pytest.mark.parametrize("force_transcoding", [False, True])
+    @pytest.mark.parametrize("transcoding_mode", list(TranscodingMode))
     def test_transcode(
         self,
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         settings: Settings,
-        force_transcoding: bool,
+        transcoding_mode: TranscodingMode,
         uid_generator: CallableUidGenerator,
     ) -> None:
         # Arrange
@@ -106,8 +115,14 @@ class TestWsiDicomFileTargetIntegration:
             0
         ].default_instance.image_data.transfer_syntax
         transcoder = Encoder.create_for_settings(settings)
-        expect_transcoding = force_transcoding or (
-            original_transfer_syntax != transcoder.transfer_syntax
+        expect_transcoding = transcoding_mode == TranscodingMode.ALWAYS or (
+            transcoding_mode == TranscodingMode.MATCH
+            and original_transfer_syntax != transcoder.transfer_syntax
+        )
+        expected_transfer_syntax = (
+            transcoder.transfer_syntax
+            if expect_transcoding
+            else original_transfer_syntax
         )
 
         # Act
@@ -122,7 +137,7 @@ class TestWsiDicomFileTargetIntegration:
             False,
             False,
             transcoder,
-            force_transcoding,
+            transcoding_mode,
         ) as target:
             target.save(wsi.pyramids, None, None, True)
 
@@ -132,7 +147,7 @@ class TestWsiDicomFileTargetIntegration:
             level = saved_wsi.pyramids[0].base_level
             assert (
                 level.default_instance.image_data.transfer_syntax
-                == transcoder.transfer_syntax
+                == expected_transfer_syntax
             )
             assert level.default_instance.dataset.lossy_compressed
             original_methods = (
@@ -158,6 +173,102 @@ class TestWsiDicomFileTargetIntegration:
                 )
                 assert methods == original_methods
                 assert ratios == original_ratios
+
+    @pytest.mark.skipif(not JpegOptimizer.is_available(), reason="Requires imagecodecs")
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
+    def test_transcode_to_optimized_jpeg_recodes_copied_tiles(
+        self,
+        wsi_name: str,
+        wsi_factory: Callable[[str], WsiDicom],
+        tmp_path: Path,
+        uid_generator: CallableUidGenerator,
+    ) -> None:
+        # Arrange
+        wsi = wsi_factory(wsi_name)
+        if all(
+            level.default_instance.image_data.transfer_syntax != JPEGBaseline8Bit
+            for level in wsi.pyramids[0].levels
+        ):
+            pytest.skip("No level is JPEG Baseline")
+        transcoder = Encoder.create_for_settings(JpegSettings(optimize=True))
+        jpeg_optimizer = JpegOptimizer(JpegSettings(optimize=True))
+
+        # Act
+        with WsiDicomFileTarget(
+            tmp_path,
+            uid_generator,
+            1,
+            None,
+            OffsetTableType.BASIC,
+            None,
+            None,
+            False,
+            False,
+            transcoder,
+            TranscodingMode.MATCH,
+        ) as target:
+            target.save(wsi.pyramids, None, None, True)
+
+        # Assert
+        with WsiDicom.open(tmp_path) as saved_wsi:
+            for original_level, level in zip(
+                wsi.pyramids[0].levels, saved_wsi.pyramids[0].levels, strict=True
+            ):
+                original_image_data = original_level.default_instance.image_data
+                if original_image_data.transfer_syntax != JPEGBaseline8Bit:
+                    continue
+                image_data = level.default_instance.image_data
+                assert image_data.transfer_syntax == JPEGBaseline8Bit
+                assert (
+                    level.default_instance.dataset.lossy_compression_methods
+                    == original_level.default_instance.dataset.lossy_compression_methods
+                )
+                tiled_size = image_data.tiled_size
+                focal_plane = image_data.focal_planes[0]
+                optical_path = image_data.optical_paths[0]
+                for y in range(tiled_size.height):
+                    for x in range(tiled_size.width):
+                        position = Point(x, y)
+                        original_tile = original_image_data.get_encoded_tile(
+                            position, focal_plane, optical_path
+                        )
+                        tile = image_data.get_encoded_tile(
+                            position, focal_plane, optical_path
+                        )
+                        assert np.array_equal(
+                            image_data.get_decoded_tile(
+                                position, focal_plane, optical_path
+                            ),
+                            original_image_data.get_decoded_tile(
+                                position, focal_plane, optical_path
+                            ),
+                        )
+                        assert self._frame_marker(tile) == self.BASELINE_FRAME_MARKER
+                        # Progressive tiles, which JPEG Baseline does not allow,
+                        # become baseline and can grow; baseline tiles never do.
+                        if (
+                            self._frame_marker(original_tile)
+                            == self.BASELINE_FRAME_MARKER
+                        ):
+                            assert len(tile) <= len(original_tile)
+                        # A frame of odd length is stored with a trailing pad byte.
+                        unpadded = tile.removesuffix(b"\x00")
+                        assert len(jpeg_optimizer.recode(unpadded)) == len(unpadded)
+
+    BASELINE_FRAME_MARKER = 0xC0
+    """Start of frame marker of a baseline JPEG."""
+
+    @staticmethod
+    def _frame_marker(frame: bytes) -> int:
+        """Return the start of frame marker of a JPEG frame."""
+        index = 2
+        while frame[index + 1] not in range(0xC0, 0xD0) or frame[index + 1] in (
+            0xC4,
+            0xC8,
+            0xCC,
+        ):
+            index += 2 + int.from_bytes(frame[index + 2 : index + 4], "big")
+        return frame[index + 1]
 
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
     def test_save_levels_add_missing(

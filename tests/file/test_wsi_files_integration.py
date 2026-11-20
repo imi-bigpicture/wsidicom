@@ -33,6 +33,7 @@ from wsidicom.codec import JpegSettings
 from wsidicom.file import WsiDicomFileTarget
 from wsidicom.metadata import ImageType
 from wsidicom.metadata.uid_generator import CallableUidGenerator
+from wsidicom.options import TranscodingMode
 from wsidicom.series import Pyramids
 
 
@@ -175,7 +176,7 @@ class TestWsiFilesIntegration:
             include_overviews=False,
             include_thumbnails=False,
             transcoding=JpegSettings(),
-            force_transcoding=True,
+            transcoding_mode=TranscodingMode.ALWAYS,
         )
 
         # Assert

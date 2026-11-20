@@ -38,6 +38,7 @@ from wsidicom.options import (
     ConcatenationByBytes,
     ConcatenationByFrames,
     InstanceSplit,
+    TranscodingMode,
 )
 from wsidicom.paths import as_upath
 from wsidicom.series import Labels, Overviews, Pyramids
@@ -59,7 +60,7 @@ class WsiDicomFileTarget(Target):
         add_missing_levels: bool = False,
         regenerate_pyramid: bool = False,
         transcoding: EncoderSettings | Encoder | None = None,
-        force_transcoding: bool = False,
+        transcoding_mode: TranscodingMode = TranscodingMode.MATCH,
         file_options: dict[str, Any] | None = None,
         metadata: WsiMetadata | None = None,
         replace_metadata: bool = True,
@@ -97,9 +98,9 @@ class WsiDicomFileTarget(Target):
         transcoding: EncoderSettings | Encoder | None = None,
             Optional settings or encoder for transcoding image data. If None, image data
             will be copied as is.
-        force_transcoding: bool
-            If to force transcoding even if transfer syntax already matches the encoding
-            settings.
+        transcoding_mode: TranscodingMode = TranscodingMode.MATCH
+            Which images are transcoded with `transcoding`. By default those in
+            another transfer syntax than it, see `TranscodingMode`.
         file_options: dict[str, Any] | None = None
             Keyword arguments for saving files to output path.
         metadata: WsiMetadata | None = None
@@ -136,7 +137,7 @@ class WsiDicomFileTarget(Target):
             add_missing_levels,
             regenerate_pyramid,
             transcoding,
-            force_transcoding,
+            transcoding_mode,
         )
 
     @property
@@ -230,8 +231,7 @@ class WsiDicomFileTarget(Target):
                 uid_generator=self._uid_generator,
                 max_threads=self._workers,
                 offset_table=self._offset_table,
-                transcoder=self._transcoder,
-                force_transcoding=self._force_transcoding,
+                encoding_resolver=self._encoding_resolver,
                 include_levels=self._include_levels,
                 add_missing_levels=self._add_missing_levels,
                 regenerate_pyramid=self._regenerate_pyramid,
@@ -267,8 +267,7 @@ class WsiDicomFileTarget(Target):
             group=group,
             output_path=self._output_path,
             uid_generator=self._uid_generator,
-            transcoder=self._transcoder,
-            force_transcoding=self._force_transcoding,
+            encoding_resolver=self._encoding_resolver,
             offset_table=self._offset_table,
             instance_number_start=self._instance_number,
             metadata=self._metadata,

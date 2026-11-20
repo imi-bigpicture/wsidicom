@@ -192,8 +192,13 @@ class EncodedFrameCache(FrameCache[bytes]):
 
 
 class DecodedFrameCache(FrameCache[np.ndarray]):
-    """Caches decoded tiles as numpy arrays."""
+    """Caches decoded tiles as numpy arrays.
+
+    The cached arrays are made read-only, as every read of a tile is given the
+    same array.
+    """
 
     @classmethod
     def _to_cache_item(cls, value: np.ndarray) -> CacheItem[np.ndarray]:
+        value.flags.writeable = False
         return CacheItem(value, value.nbytes)

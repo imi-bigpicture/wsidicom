@@ -20,6 +20,7 @@ from typing import Any
 import numpy as np
 import pytest
 from PIL import Image as Pillow
+from PIL import ImageDraw
 from pydicom.uid import UID
 
 from tests.conftest import (
@@ -350,6 +351,48 @@ class TestWsiDicomIntegration:
         # Assert
         checksum = md5(im.tobytes()).hexdigest()
         assert checksum == region["md5"], (region, checksum)
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
+    def test_array_reads_are_read_only(
+        self,
+        wsi_name: str,
+        input_type: WsiInputType,
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
+    ) -> None:
+        # Arrange
+        wsi = wsi_factory(wsi_name, input_type)
+        level = wsi.pyramids[0][-1]
+        part_size = (min(100, level.size.width), min(100, level.size.height))
+
+        # Act
+        arrays = [
+            wsi.read_tile(level.level, (0, 0), as_array=True),
+            wsi.read_region((0, 0), level.level, part_size, as_array=True),
+            wsi.read_region((0, 0), level.level, level.size.to_tuple(), as_array=True),
+        ]
+
+        # Assert
+        assert all(not array.flags.writeable for array in arrays)
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
+    def test_drawing_on_read_image_does_not_change_later_reads(
+        self,
+        wsi_name: str,
+        input_type: WsiInputType,
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
+    ) -> None:
+        # Arrange
+        wsi = wsi_factory(wsi_name, input_type)
+        level = wsi.pyramids[0][-1]
+        before = np.array(wsi.read_tile(level.level, (0, 0), as_array=True))
+        image = wsi.read_tile(level.level, (0, 0))
+
+        # Act
+        ImageDraw.Draw(image).rectangle((0, 0, 20, 20), fill=255)
+
+        # Assert
+        after = wsi.read_tile(level.level, (0, 0), as_array=True)
+        assert np.array_equal(after, before)
 
     @pytest.mark.parametrize(
         ["wsi_name", "transfer_syntax", "region"],

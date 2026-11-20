@@ -14,19 +14,24 @@
 
 """Tile readers for pyramid generation.
 
-Each reader reads tiles from source ImageData and dispatches them:
-- PassthroughTileReader: encoded only, no accumulator
-- CascadingPassthroughTileReader: encoded + decoded, feeds accumulator
-- TranscodeTileReader: decoded only, submits to encoder pool
-- CascadingTranscodeTileReader: decoded, submits to encoder pool + feeds accumulator
+Each reader reads tiles from source ImageData, submits them for writing in
+segments of consecutive tiles of a tile row, and feeds the decoded tiles to an
+accumulator if it has one:
+- EncodedTileReader: reads encoded tiles and hands each segment to an encoded
+  tile submitter, which puts them on the output queue as they are
+  (PassthroughEncodedTileSubmitter) or has them recoded first
+  (RecodeEncodedTileSubmitter).
+- TranscodeTileReader: reads decoded tiles and submits each segment to the
+  encoder pool to be encoded.
 """
 
 from abc import ABCMeta, abstractmethod
-from collections.abc import Sequence
-from typing import Protocol
+from collections.abc import Iterable, Iterator, Sequence
+from typing import Protocol, TypeVar
 
 import numpy as np
 
+from wsidicom.codec import Encoder, Recoder
 from wsidicom.geometry import Point
 from wsidicom.instance import ImageData
 from wsidicom.thread import CancellationToken, WriteOnlyQueue
@@ -34,7 +39,10 @@ from wsidicom.writing.models import (
     EncodeTask,
     EncodingTaskResult,
     PyramidTilePosition,
+    RecodeTask,
 )
+
+TileType = TypeVar("TileType")
 
 
 class TileAccumulator(Protocol):
@@ -50,11 +58,90 @@ class TileAccumulator(Protocol):
         ...
 
 
+class EncodedTileSubmitter(metaclass=ABCMeta):
+    """Gets encoded tiles onto an output queue, changed or not on the way."""
+
+    def __init__(self, token: CancellationToken) -> None:
+        self._token = token
+
+    @abstractmethod
+    def submit(
+        self,
+        output_queue: WriteOnlyQueue[EncodingTaskResult],
+        coordinates: PyramidTilePosition,
+        tiles: list[bytes],
+    ) -> None:
+        """Submit encoded tiles to end up on the output queue.
+
+        The tiles are consecutive in x within one tile row.
+
+        Parameters
+        ----------
+        output_queue: WriteOnlyQueue[EncodingTaskResult]
+            Queue the tiles are to end up on.
+        coordinates: PyramidTilePosition
+            Position of the first of the tiles.
+        tiles: list[bytes]
+            The encoded tiles, in increasing x.
+        """
+        raise NotImplementedError()
+
+
+class PassthroughEncodedTileSubmitter(EncodedTileSubmitter):
+    """Puts encoded tiles on the output queue as they are."""
+
+    def submit(
+        self,
+        output_queue: WriteOnlyQueue[EncodingTaskResult],
+        coordinates: PyramidTilePosition,
+        tiles: list[bytes],
+    ) -> None:
+        output_queue.put(
+            EncodingTaskResult(coordinates=coordinates, tiles=tiles), self._token
+        )
+
+
+class RecodeEncodedTileSubmitter(EncodedTileSubmitter):
+    """Submits encoded tiles to the encoder pool to be recoded."""
+
+    def __init__(
+        self,
+        encoder_pool_queue: WriteOnlyQueue[RecodeTask],
+        recoder: Recoder,
+        token: CancellationToken,
+    ) -> None:
+        super().__init__(token)
+        self._encoder_pool_queue = encoder_pool_queue
+        self._recoder = recoder
+
+    def submit(
+        self,
+        output_queue: WriteOnlyQueue[EncodingTaskResult],
+        coordinates: PyramidTilePosition,
+        tiles: list[bytes],
+    ) -> None:
+        self._encoder_pool_queue.put(
+            RecodeTask(
+                coordinates=coordinates,
+                tiles=tiles,
+                recoder=self._recoder,
+                output_queue=output_queue,
+            ),
+            self._token,
+        )
+
+
 class TileReader(metaclass=ABCMeta):
     """Reads tiles from source and submits them for writing."""
 
-    def __init__(self, level_index: int, token: CancellationToken) -> None:
+    def __init__(
+        self,
+        level_index: int,
+        accumulator: TileAccumulator | None,
+        token: CancellationToken,
+    ) -> None:
         self._level_index = level_index
+        self._accumulator = accumulator
         self._token = token
 
     @property
@@ -64,7 +151,9 @@ class TileReader(metaclass=ABCMeta):
     @property
     def accumulator_chain_depth(self) -> int:
         """Depth of the accumulator chain. 0 if no accumulator."""
-        return 0
+        if self._accumulator is None:
+            return 0
+        return self._accumulator.chain_depth
 
     @abstractmethod
     def read_and_submit(
@@ -91,69 +180,56 @@ class TileReader(metaclass=ABCMeta):
             optical_path_index=path_index,
         )
 
-    def _submit_row(
-        self,
-        output_queue: WriteOnlyQueue[EncodingTaskResult],
-        row_start: Point,
-        tiles: list[bytes],
-        z_index: int,
-        path_index: int,
-    ) -> None:
-        """Submit a row of consecutive encoded tiles as one result."""
-        output_queue.put(
-            EncodingTaskResult(
-                coordinates=self._make_coordinates(row_start, z_index, path_index),
-                tiles=tiles,
-            ),
-            self._token,
-        )
+    @staticmethod
+    def _iterate_row_segments(
+        positions: Sequence[Point], tiles: Iterable[TileType]
+    ) -> Iterator[tuple[list[Point], list[TileType]]]:
+        """Group tiles into segments of a tile row.
+
+        A segment ends where the next position is in another tile row. The
+        positions within a tile row are taken to be consecutive in x, as they
+        are batched by the level writer.
+
+        Parameters
+        ----------
+        positions: Sequence[Point]
+            Positions of the tiles.
+        tiles: Iterable[TileType]
+            The tiles, in the order of the positions.
+
+        Returns
+        -------
+        Iterator[tuple[list[Point], list[TileType]]]
+            The positions and the tiles of each segment.
+        """
+        segment_positions: list[Point] = []
+        segment_tiles: list[TileType] = []
+        for position, tile in zip(positions, tiles, strict=True):
+            if segment_positions and position.y != segment_positions[0].y:
+                yield segment_positions, segment_tiles
+                segment_positions = []
+                segment_tiles = []
+            segment_positions.append(position)
+            segment_tiles.append(tile)
+        if segment_positions:
+            yield segment_positions, segment_tiles
 
 
-class PassthroughTileReader(TileReader):
-    """Reads encoded tiles and submits to writer."""
+class EncodedTileReader(TileReader):
+    """Reads encoded tiles and hands them segment by segment to a submitter.
 
-    def read_and_submit(
-        self,
-        image_data: ImageData,
-        positions: Sequence[Point],
-        z: float,
-        path: str,
-        z_index: int,
-        path_index: int,
-        output_queue: WriteOnlyQueue[EncodingTaskResult],
-    ) -> None:
-        row_start: Point | None = None
-        row_tiles: list[bytes] = []
-        for position, encoded in zip(
-            positions, image_data.get_encoded_tiles(positions, z, path), strict=True
-        ):
-            if row_start is not None and position.y != row_start.y:
-                self._submit_row(
-                    output_queue, row_start, row_tiles, z_index, path_index
-                )
-                row_tiles = []
-            if not row_tiles:
-                row_start = position
-            row_tiles.append(encoded)
-        if row_tiles and row_start is not None:
-            self._submit_row(output_queue, row_start, row_tiles, z_index, path_index)
-
-
-class CascadingPassthroughTileReader(TileReader):
-    """Reads encoded+decoded tiles, submits encoded, feeds decoded to accumulator."""
+    With an accumulator the tiles are also read decoded and fed to it.
+    """
 
     def __init__(
         self,
         level_index: int,
-        accumulator: TileAccumulator,
+        encoded_tile_submitter: EncodedTileSubmitter,
+        accumulator: TileAccumulator | None,
         token: CancellationToken,
     ) -> None:
-        super().__init__(level_index, token)
-        self._accumulator = accumulator
-
-    @property
-    def accumulator_chain_depth(self) -> int:
-        return self._accumulator.chain_depth
+        super().__init__(level_index, accumulator, token)
+        self._encoded_tile_submitter = encoded_tile_submitter
 
     def read_and_submit(
         self,
@@ -165,39 +241,48 @@ class CascadingPassthroughTileReader(TileReader):
         path_index: int,
         output_queue: WriteOnlyQueue[EncodingTaskResult],
     ) -> None:
-        row_start: Point | None = None
-        row_tiles: list[bytes] = []
-        for position, (encoded, decoded) in zip(
-            positions,
-            image_data.get_encoded_and_decoded_tiles(positions, z, path),
-            strict=True,
-        ):
-            if row_start is not None and position.y != row_start.y:
-                self._submit_row(
-                    output_queue, row_start, row_tiles, z_index, path_index
+        accumulator = self._accumulator
+        if accumulator is None:
+            for segment_positions, encoded_tiles in self._iterate_row_segments(
+                positions, image_data.get_encoded_tiles(positions, z, path)
+            ):
+                self._encoded_tile_submitter.submit(
+                    output_queue,
+                    self._make_coordinates(segment_positions[0], z_index, path_index),
+                    encoded_tiles,
                 )
-                row_tiles = []
-            if not row_tiles:
-                row_start = position
-            row_tiles.append(encoded)
-            self._accumulator.add_tile(
-                position.x, position.y, z_index, path_index, decoded
+            return
+        for segment_positions, tiles in self._iterate_row_segments(
+            positions, image_data.get_encoded_and_decoded_tiles(positions, z, path)
+        ):
+            for position, (_, decoded) in zip(segment_positions, tiles, strict=True):
+                accumulator.add_tile(
+                    position.x, position.y, z_index, path_index, decoded
+                )
+            self._encoded_tile_submitter.submit(
+                output_queue,
+                self._make_coordinates(segment_positions[0], z_index, path_index),
+                [encoded for encoded, _ in tiles],
             )
-        if row_tiles and row_start is not None:
-            self._submit_row(output_queue, row_start, row_tiles, z_index, path_index)
 
 
 class TranscodeTileReader(TileReader):
-    """Reads decoded tiles and submits to encoder pool."""
+    """Reads decoded tiles and submits them segment by segment to be encoded.
+
+    With an accumulator the decoded tiles are also fed to it.
+    """
 
     def __init__(
         self,
         level_index: int,
         encoder_pool_queue: WriteOnlyQueue[EncodeTask],
+        encoder: Encoder,
+        accumulator: TileAccumulator | None,
         token: CancellationToken,
     ) -> None:
-        super().__init__(level_index, token)
+        super().__init__(level_index, accumulator, token)
         self._encoder_pool_queue = encoder_pool_queue
+        self._encoder = encoder
 
     def read_and_submit(
         self,
@@ -209,97 +294,23 @@ class TranscodeTileReader(TileReader):
         path_index: int,
         output_queue: WriteOnlyQueue[EncodingTaskResult],
     ) -> None:
-        row_start: Point | None = None
-        row_tiles: list[np.ndarray] = []
-        for position, decoded in zip(
-            positions,
-            image_data.get_decoded_tiles(positions, z, path, cache=False),
-            strict=True,
+        for segment_positions, decoded_tiles in self._iterate_row_segments(
+            positions, image_data.get_decoded_tiles(positions, z, path, cache=False)
         ):
-            if row_start is not None and position.y != row_start.y:
-                self._encoder_pool_queue.put(
-                    EncodeTask(
-                        coordinates=self._make_coordinates(
-                            row_start, z_index, path_index
-                        ),
-                        tiles=row_tiles,
-                        output_queue=output_queue,
-                    ),
-                    self._token,
-                )
-                row_tiles = []
-            if not row_tiles:
-                row_start = position
-            row_tiles.append(decoded)
-        if row_tiles and row_start is not None:
+            if self._accumulator is not None:
+                for position, decoded in zip(
+                    segment_positions, decoded_tiles, strict=True
+                ):
+                    self._accumulator.add_tile(
+                        position.x, position.y, z_index, path_index, decoded
+                    )
             self._encoder_pool_queue.put(
                 EncodeTask(
-                    coordinates=self._make_coordinates(row_start, z_index, path_index),
-                    tiles=row_tiles,
-                    output_queue=output_queue,
-                ),
-                self._token,
-            )
-
-
-class CascadingTranscodeTileReader(TileReader):
-    """Reads decoded tiles, submits to encoder pool, feeds accumulator."""
-
-    def __init__(
-        self,
-        level_index: int,
-        encoder_pool_queue: WriteOnlyQueue[EncodeTask],
-        accumulator: TileAccumulator,
-        token: CancellationToken,
-    ) -> None:
-        super().__init__(level_index, token)
-        self._encoder_pool_queue = encoder_pool_queue
-        self._accumulator = accumulator
-
-    @property
-    def accumulator_chain_depth(self) -> int:
-        return self._accumulator.chain_depth
-
-    def read_and_submit(
-        self,
-        image_data: ImageData,
-        positions: Sequence[Point],
-        z: float,
-        path: str,
-        z_index: int,
-        path_index: int,
-        output_queue: WriteOnlyQueue[EncodingTaskResult],
-    ) -> None:
-        row_start: Point | None = None
-        row_tiles: list[np.ndarray] = []
-        for position, decoded in zip(
-            positions,
-            image_data.get_decoded_tiles(positions, z, path, cache=False),
-            strict=True,
-        ):
-            if row_start is not None and position.y != row_start.y:
-                self._encoder_pool_queue.put(
-                    EncodeTask(
-                        coordinates=self._make_coordinates(
-                            row_start, z_index, path_index
-                        ),
-                        tiles=row_tiles,
-                        output_queue=output_queue,
+                    coordinates=self._make_coordinates(
+                        segment_positions[0], z_index, path_index
                     ),
-                    self._token,
-                )
-                row_tiles = []
-            if not row_tiles:
-                row_start = position
-            row_tiles.append(decoded)
-            self._accumulator.add_tile(
-                position.x, position.y, z_index, path_index, decoded
-            )
-        if row_tiles and row_start is not None:
-            self._encoder_pool_queue.put(
-                EncodeTask(
-                    coordinates=self._make_coordinates(row_start, z_index, path_index),
-                    tiles=row_tiles,
+                    tiles=decoded_tiles,
+                    encoder=self._encoder,
                     output_queue=output_queue,
                 ),
                 self._token,

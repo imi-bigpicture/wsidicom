@@ -18,6 +18,7 @@ from wsidicom.codec.codec import Codec
 from wsidicom.codec.decoder import Decoder
 from wsidicom.codec.encoder import Encoder, LossyCompressionIsoStandard
 from wsidicom.codec.media_types import determine_media_type
+from wsidicom.codec.recoder import Recoder
 from wsidicom.codec.settings import (
     Channels,
     Jpeg2kSettings,
@@ -41,6 +42,7 @@ __all__ = [
     "JpegSettings",
     "LossyCompressionIsoStandard",
     "NumpySettings",
+    "Recoder",
     "RleSettings",
     "Settings",
     "Subsampling",

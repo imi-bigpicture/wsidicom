@@ -112,6 +112,26 @@ class InstanceSplit(Flag):
     """Write a separate instance per optical path."""
 
 
+class TranscodingMode(Enum):
+    """Which images are transcoded with the transcoding settings when saving.
+
+    In every mode, images that can only be given decoded, and tiles of levels
+    generated when saving, are encoded with the settings if those can encode
+    them, and images that the settings can recode, such as JPEG Baseline images
+    for settings asking for optimized Huffman tables, are recoded.
+    """
+
+    MATCH = auto()
+    """Transcode images in another transfer syntax than the settings, so that every
+    image is in it. Images already in it are copied (default)."""
+    ALWAYS = auto()
+    """Transcode every image, also those already in the transfer syntax of the
+    settings."""
+    WHEN_REQUIRED = auto()
+    """Transcode only images that must be encoded. Other images are copied in their
+    own transfer syntax."""
+
+
 @dataclass(frozen=True)
 class ConcatenationByFrames:
     """Split each level into concatenated instances of at most `count` frames."""

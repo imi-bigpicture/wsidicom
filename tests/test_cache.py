@@ -12,9 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import numpy as np
 import pytest
 
-from wsidicom.cache import LRU, CacheItem, EncodedFrameCache
+from wsidicom.cache import LRU, CacheItem, DecodedFrameCache, EncodedFrameCache
 
 ITEM_SIZE = 50
 
@@ -104,3 +105,19 @@ class TestFrameCache:
 
         # Assert
         assert len(fetched) == FRAME_COUNT
+
+
+@pytest.mark.unittest
+class TestDecodedFrameCache:
+    def test_cached_frames_are_read_only(self) -> None:
+        # Arrange
+        cache = DecodedFrameCache(1024 * 1024)
+
+        # Act
+        frame = cache.get_tile_frame(
+            1, 0, lambda _: np.zeros((4, 4, 3), dtype=np.uint8)
+        )
+
+        # Assert
+        assert not frame.flags.writeable
+        assert cache.get_tile_frame(1, 0, lambda _: np.ones((4, 4, 3))) is frame
