@@ -205,7 +205,7 @@ class TestWsiDicomFileTargetIntegration:
             False,
             False,
             transcoder,
-            False,
+            TranscodingMode.MATCH,
         ) as target:
             target.save(wsi.pyramids, None, None, True)
 
