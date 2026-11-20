@@ -19,6 +19,7 @@ import random
 import sys
 from collections.abc import Callable, Iterator
 from concurrent.futures import Executor, ThreadPoolExecutor
+from copy import deepcopy
 from enum import Enum
 from pathlib import Path
 from random import Random
@@ -26,24 +27,41 @@ from typing import Any
 
 import pytest
 from dicomweb_client import DICOMfileClient
+from pydicom.dataset import Dataset, FileMetaDataset
+from pydicom.encaps import encapsulate
+from pydicom.sequence import Sequence
 from pydicom.uid import (
     JPEG2000,
     UID,
     ExplicitVRLittleEndian,
     JPEGBaseline8Bit,
+    generate_uid,
 )
 
-from tests.data_gen import create_layer_file
 from tests.file.io.test_wsidicom_writer import WsiDicomTestImageData
 from wsidicom import WsiDicom
 from wsidicom.config import Settings
+from wsidicom.file import OffsetTableType
 from wsidicom.geometry import Size
+from wsidicom.instance import TileType
 from wsidicom.metadata.uid_generator import CallableUidGenerator
 from wsidicom.thread import ReadExecutor
 from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
 
 SLIDE_FOLDER = Path(os.environ.get("WSIDICOM_TESTDIR", "tests/testdata/slides"))
 REGION_DEFINITIONS_FILE = "tests/testdata/region_definitions.json"
+TEST_FRAME_FILE = Path("tests/testdata/test_frame.jpg")
+"""An all black 1024x1024 RGB baseline JPEG, of odd length."""
+
+
+def create_layer_file(
+    filename: Path, dataset: Dataset, file_meta: FileMetaDataset
+) -> None:
+    """Write a dataset with its file meta information to a file."""
+    dataset.file_meta = file_meta
+    dataset.save_as(
+        filename, enforce_file_format=True, implicit_vr=False, little_endian=True
+    )
 
 
 def skip_if_hash_unstable(transfer_syntax: UID) -> None:
@@ -237,9 +255,13 @@ class WsiTestDefinitions:
 
 
 @pytest.fixture
-def wsi_file(tmp_path: Path) -> Path:
+def wsi_file(
+    tmp_path: Path,
+    main_dataset_with_pixel_data: Dataset,
+    meta_dataset: FileMetaDataset,
+) -> Path:
     test_file_path = tmp_path.joinpath("test_im.dcm")
-    create_layer_file(test_file_path)
+    create_layer_file(test_file_path, main_dataset_with_pixel_data, meta_dataset)
     return test_file_path
 
 
@@ -392,3 +414,290 @@ def image_data(frames: list[bytes], tiled_size: Size) -> WsiDicomTestImageData:
 @pytest.fixture(scope="module")
 def uid_generator() -> CallableUidGenerator:
     return CallableUidGenerator()
+
+
+@pytest.fixture
+def tile_type() -> TileType:
+    """Return the tile type of the test volume instance."""
+    return TileType.SPARSE
+
+
+@pytest.fixture
+def offset_table() -> OffsetTableType:
+    """Return the offset table of the pixel data of the test volume instance."""
+    return OffsetTableType.BASIC
+
+
+@pytest.fixture
+def main_dataset(tile_type: TileType) -> Dataset:
+    """Return the metadata of a test volume instance, without pixel data."""
+    ds = Dataset()
+    ds.ImageType = ["DERIVED", "PRIMARY", "VOLUME", "RESAMPLED"]
+    ds.SOPClassUID = "1.2.840.10008.5.1.4.1.1.77.1.6"
+    ds.SOPInstanceUID = generate_uid()
+    ds.StudyDate = "20210210"
+    ds.ContentDate = "20210210"
+    ds.AcquisitionDateTime = ""
+    ds.StudyTime = "142341.188035"
+    ds.ContentTime = "142341.188035"
+    ds.AccessionNumber = "Accession number"
+    ds.Modality = "SM"
+    ds.Manufacturer = "Manufacturer"
+    ds.ReferringPhysicianName = ""
+    ds.TimezoneOffsetFromUTC = "+0100"
+    ds.ManufacturerModelName = "Model"
+    ds.VolumetricProperties = "VOLUME"
+    ds.PatientName = "Patient^Name"
+    ds.PatientID = "Patient ID"
+    ds.PatientBirthDate = ""
+    ds.PatientSex = ""
+    ds.DeviceSerialNumber = "Device serial number"
+    ds.SoftwareVersions = ["?"]
+    ds.AcquisitionDuration = 50.0
+    ds.StudyInstanceUID = generate_uid()
+    ds.SeriesInstanceUID = generate_uid()
+    ds.StudyID = "Study ID"
+    ds.SeriesNumber = "1"
+    ds.InstanceNumber = "1"
+    ds.PatientOrientation = ""
+    ds.FrameOfReferenceUID = generate_uid()
+    ds.PositionReferenceIndicator = "SLIDE_CORNER"
+
+    # Dimension Organization Sequence
+    dimension_organization_sequence = Sequence()
+    ds.DimensionOrganizationSequence = dimension_organization_sequence
+
+    dimensional_organization_uid = generate_uid()
+    # Dimension Organization Sequence: Dimension Organization 1
+    dimension_organization1 = Dataset()
+    dimension_organization1.DimensionOrganizationUID = dimensional_organization_uid
+    dimension_organization_sequence.append(dimension_organization1)
+
+    # Dimension Index Sequence
+    dimension_index_sequence = Sequence()
+    ds.DimensionIndexSequence = dimension_index_sequence
+
+    # Dimension Index Sequence: Dimension Index 1
+    dimension_index1 = Dataset()
+    dimension_index1.DimensionOrganizationUID = dimensional_organization_uid
+    dimension_index1.DimensionIndexPointer = (0x48, 0x21A)
+    dimension_index_sequence.append(dimension_index1)
+
+    ds.SamplesPerPixel = 3
+    ds.PhotometricInterpretation = "YBR_FULL_422"
+    ds.PlanarConfiguration = 0
+    ds.NumberOfFrames = "1"
+    ds.Rows = 1024
+    ds.Columns = 1024
+    ds.BitsAllocated = 8
+    ds.BitsStored = 8
+    ds.HighBit = 7
+    ds.PixelRepresentation = 0
+    ds.BurnedInAnnotation = "NO"
+    ds.LossyImageCompression = "01"
+    ds.LossyImageCompressionRatio = "100.0"
+    ds.LossyImageCompressionMethod = "ISO_10918_1"
+    ds.ContainerIdentifier = "?"
+
+    # Issuer of the Container Identifier Sequence
+    issuer_of_the_container_identifier_sequence = Sequence()
+    ds.IssuerOfTheContainerIdentifierSequence = (
+        issuer_of_the_container_identifier_sequence
+    )
+
+    # Container Type Code Sequence
+    container_type_code_sequence = Sequence()
+    ds.ContainerTypeCodeSequence = container_type_code_sequence
+
+    # Acquisition Context Sequence
+    acquisition_context_sequence = Sequence()
+    ds.AcquisitionContextSequence = acquisition_context_sequence
+
+    # Specimen Description Sequence
+    specimen_description_sequence = Sequence()
+    ds.SpecimenDescriptionSequence = specimen_description_sequence
+
+    # Specimen Description Sequence: Specimen Description 1
+    specimen_description1 = Dataset()
+    specimen_description1.SpecimenIdentifier = "?"
+    specimen_description1.SpecimenUID = generate_uid()
+
+    # Issuer of the Specimen Identifier Sequence
+    issuer_of_the_specimen_identifier_sequence = Sequence()
+    specimen_description1.IssuerOfTheSpecimenIdentifierSequence = (
+        issuer_of_the_specimen_identifier_sequence
+    )
+
+    # Specimen Preparation Sequence
+    specimen_preparation_sequence = Sequence()
+    specimen_description1.SpecimenPreparationSequence = specimen_preparation_sequence
+    specimen_description_sequence.append(specimen_description1)
+
+    ds.ImagedVolumeWidth = 20.0
+    ds.ImagedVolumeHeight = 36.0
+    ds.ImagedVolumeDepth = 0.60
+    ds.TotalPixelMatrixColumns = 154
+    ds.TotalPixelMatrixRows = 290
+
+    # Total Pixel Matrix Origin Sequence
+    total_pixel_matrix_origin_sequence = Sequence()
+    ds.TotalPixelMatrixOriginSequence = total_pixel_matrix_origin_sequence
+
+    # Total Pixel Matrix Origin Sequence: Total Pixel Matrix Origin 1
+    total_pixel_matrix_origin1 = Dataset()
+    total_pixel_matrix_origin1.XOffsetInSlideCoordinateSystem = "60.0"
+    total_pixel_matrix_origin1.YOffsetInSlideCoordinateSystem = "10.0"
+    total_pixel_matrix_origin_sequence.append(total_pixel_matrix_origin1)
+
+    ds.SpecimenLabelInImage = "NO"
+    ds.FocusMethod = "AUTO"
+    ds.ExtendedDepthOfField = "NO"
+    ds.ImageOrientationSlide = [-1, 0, 0, 0, -1, 0]
+
+    # Optical Path Sequence
+    optical_path_sequence = Sequence()
+    ds.OpticalPathSequence = optical_path_sequence
+
+    # Optical Path Sequence: Optical Path 1
+    optical_path1 = Dataset()
+
+    # Illumination Type Code Sequence
+    illumination_type_code_sequence = Sequence()
+    optical_path1.IlluminationTypeCodeSequence = illumination_type_code_sequence
+
+    # Illumination Type Code Sequence: Illumination Type Code 1
+    illumination_type_code1 = Dataset()
+    illumination_type_code1.CodeValue = "111744"
+    illumination_type_code1.CodingSchemeDesignator = "DCM"
+    illumination_type_code1.CodeMeaning = "Brightfield illumination"
+    illumination_type_code_sequence.append(illumination_type_code1)
+
+    optical_path1.OpticalPathIdentifier = "0"
+
+    # Illumination Color Code Sequence
+    illumination_color_code_sequence = Sequence()
+    optical_path1.IlluminationColorCodeSequence = illumination_color_code_sequence
+
+    # Illumination Color Code Sequence: Illumination Color Code 1
+    illumination_color_code1 = Dataset()
+    illumination_color_code1.CodeValue = "R-102C0"
+    illumination_color_code1.CodingSchemeDesignator = "SRT"
+    illumination_color_code1.CodeMeaning = "Full Spectrum"
+    illumination_color_code_sequence.append(illumination_color_code1)
+    optical_path_sequence.append(optical_path1)
+
+    ds.NumberOfOpticalPaths = 1
+    ds.TotalPixelMatrixFocalPlanes = 1
+    ds.LabelText = ""
+    ds.BarcodeValue = ""
+
+    # Per-frame Functional Groups Sequence
+    per_frame_functional_groups_sequence = Sequence()
+    ds.PerFrameFunctionalGroupsSequence = per_frame_functional_groups_sequence
+    # Per-frame Functional Groups Sequence: Per-frame Functional Groups 1
+    per_frame_functional_groups1 = Dataset()
+
+    if tile_type == TileType.FULL:
+        ds.DimensionOrganizationType = "TILED_FULL"
+    else:
+        # Per-frame Functional Groups Sequence: Per-frame Functional Groups 1
+        per_frame_functional_groups1 = Dataset()
+
+        # Plane Position (Slide) Sequence
+        plane_position_slide_sequence = Sequence()
+        per_frame_functional_groups1.PlanePositionSlideSequence = (
+            plane_position_slide_sequence
+        )
+
+        # Plane Position (Slide) Sequence: Plane Position (Slide) 1
+        plane_position_slide1 = Dataset()
+        plane_position_slide1.XOffsetInSlideCoordinateSystem = "62.0"
+        plane_position_slide1.YOffsetInSlideCoordinateSystem = "10.0"
+        plane_position_slide1.ZOffsetInSlideCoordinateSystem = "0.0"
+        plane_position_slide1.ColumnPositionInTotalImagePixelMatrix = 1
+        plane_position_slide1.RowPositionInTotalImagePixelMatrix = 1
+        plane_position_slide_sequence.append(plane_position_slide1)
+
+    per_frame_functional_groups_sequence.append(per_frame_functional_groups1)
+    # Shared Functional Groups Sequence
+    shared_functional_groups_sequence = Sequence()
+    ds.SharedFunctionalGroupsSequence = shared_functional_groups_sequence
+
+    # Shared Functional Groups Sequence: Shared Functional Groups 1
+    shared_functional_groups1 = Dataset()
+
+    # Pixel Measures Sequence
+    pixel_measures_sequence = Sequence()
+    shared_functional_groups1.PixelMeasuresSequence = pixel_measures_sequence
+
+    # Pixel Measures Sequence: Pixel Measures 1
+    pixel_measures1 = Dataset()
+    pixel_measures1.SliceThickness = "0.0006"
+    pixel_measures1.SpacingBetweenSlices = "0.0006"
+    pixel_measures1.PixelSpacing = [0.1242353, 0.1241778]
+    pixel_measures_sequence.append(pixel_measures1)
+
+    # Whole Slide Microscopy Image Frame Type Sequence
+    whole_slide_microscopy_image_frame_type_sequence = Sequence()
+    shared_functional_groups1.WholeSlideMicroscopyImageFrameTypeSequence = (
+        whole_slide_microscopy_image_frame_type_sequence
+    )
+
+    # Whole Slide Microscopy Image Frame Type Sequence: Whole Slide Microscopy Image Frame Type 1
+    whole_slide_microscopy_image_frame_type1 = Dataset()
+    whole_slide_microscopy_image_frame_type1.FrameType = [
+        "DERIVED",
+        "PRIMARY",
+        "VOLUME",
+        "RESAMPLED",
+    ]
+    whole_slide_microscopy_image_frame_type_sequence.append(
+        whole_slide_microscopy_image_frame_type1
+    )
+
+    # Optical Path Identification Sequence
+    optical_path_identification_sequence = Sequence()
+    shared_functional_groups1.OpticalPathIdentificationSequence = (
+        optical_path_identification_sequence
+    )
+
+    # Optical Path Identification Sequence: Optical Path Identification 1
+    optical_path_identification1 = Dataset()
+    optical_path_identification1.OpticalPathIdentifier = "0"
+    optical_path_identification_sequence.append(optical_path_identification1)
+    shared_functional_groups_sequence.append(shared_functional_groups1)
+
+    return ds
+
+
+@pytest.fixture
+def test_frame() -> bytes:
+    """Return the frame of the test volume instance."""
+    return TEST_FRAME_FILE.read_bytes()
+
+
+@pytest.fixture
+def main_dataset_with_pixel_data(
+    main_dataset: Dataset, offset_table: OffsetTableType, test_frame: bytes
+) -> Dataset:
+    """Return the metadata of a test volume instance, with one encapsulated frame."""
+    dataset = deepcopy(main_dataset)
+    dataset.PixelData = encapsulate(
+        [test_frame], has_bot=offset_table == OffsetTableType.BASIC
+    )
+    return dataset
+
+
+@pytest.fixture
+def meta_dataset() -> FileMetaDataset:
+    """Return the file meta information of a test volume instance file."""
+    file_meta = FileMetaDataset()
+    file_meta.FileMetaInformationGroupLength = 204
+    file_meta.FileMetaInformationVersion = b"\x00\x01"
+    file_meta.MediaStorageSOPClassUID = UID("1.2.840.10008.5.1.4.1.1.77.1.6")
+    file_meta.MediaStorageSOPInstanceUID = generate_uid()
+    file_meta.TransferSyntaxUID = UID("1.2.840.10008.1.2.4.50")
+    file_meta.ImplementationClassUID = UID("1.2.826.0.1.3680043.8.498.1")
+    file_meta.ImplementationVersionName = "PYDICOM 2.2.2"
+
+    return file_meta

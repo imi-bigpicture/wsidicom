@@ -17,8 +17,8 @@ from copy import deepcopy
 import numpy as np
 import pytest
 from PIL import Image as Pillow
+from pydicom import Dataset
 
-from tests.data_gen import create_main_dataset
 from wsidicom.geometry import Point, Region, Size
 from wsidicom.instance import WsiInstance
 from wsidicom.instance.numpy_image_data import NumpyImageData
@@ -42,9 +42,11 @@ class RegionReadingImageData(NumpyImageData):
 
 @pytest.mark.unittest
 class TestWsiInstance:
-    def test_create_label_leaves_base_dataset_unchanged(self) -> None:
+    def test_create_label_leaves_base_dataset_unchanged(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange - the base dataset is commonly the dataset of the base level
-        base_dataset = create_main_dataset()
+        base_dataset = main_dataset
         unchanged = deepcopy(base_dataset)
         label = Pillow.new("RGB", (256, 128), (128, 128, 128))
 
@@ -55,9 +57,11 @@ class TestWsiInstance:
         assert base_dataset == unchanged
         assert label_instance.dataset.as_dataset().ImageType[2] == "LABEL"
 
-    def test_create_instance_leaves_base_dataset_unchanged(self) -> None:
+    def test_create_instance_leaves_base_dataset_unchanged(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange - one base dataset given for several instances
-        base_dataset = create_main_dataset()
+        base_dataset = main_dataset
         unchanged = deepcopy(base_dataset)
         image_data = NumpyImageData.from_image(
             Pillow.new("RGB", (256, 128), (128, 128, 128))
@@ -74,11 +78,11 @@ class TestWsiInstance:
         assert overview.dataset.as_dataset().ImageType[2] == "OVERVIEW"
         assert label.dataset.as_dataset().ImageType[2] == "LABEL"
 
-    def test_region_is_read_through_image_data(self) -> None:
+    def test_region_is_read_through_image_data(self, main_dataset: Dataset) -> None:
         # Arrange - image data that reads regions itself rather than by tiles
         image_data = RegionReadingImageData(np.zeros((128, 256, 3), np.uint8))
         instance = WsiInstance.create_instance(
-            image_data, create_main_dataset(), ImageType.OVERVIEW
+            image_data, main_dataset, ImageType.OVERVIEW
         )
         region = Region(Point(10, 20), Size(30, 40))
 

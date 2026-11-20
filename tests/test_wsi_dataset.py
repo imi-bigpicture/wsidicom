@@ -8,7 +8,6 @@ from pydicom.sequence import Sequence as DicomSequence
 from pydicom.tag import BaseTag, Tag
 from pydicom.uid import UID, CTImageStorage, generate_uid
 
-from tests.data_gen import create_main_dataset
 from wsidicom.config import Settings, use_settings
 from wsidicom.errors import WsiDicomError
 from wsidicom.geometry import Size, SizeMm
@@ -487,9 +486,11 @@ class TestWsiDataset:
         # Assert
         assert instance_dataset.as_dataset().ImageType == expected_image_type
 
-    def test_is_supported_image_type_supported_volume_returns_true(self) -> None:
+    def test_is_supported_image_type_supported_volume_returns_true(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange
-        dataset = create_main_dataset()
+        dataset = main_dataset
 
         # Act
         is_supported_image_type = WsiDataset.is_supported_image_type(dataset)
@@ -499,6 +500,7 @@ class TestWsiDataset:
 
     def test_is_supported_image_type_answers_from_the_attributes_read_first(
         self,
+        main_dataset: Dataset,
     ) -> None:
         """The check a reader makes before parsing the rest of a stream.
 
@@ -506,7 +508,7 @@ class TestWsiDataset:
         UID, so it must not read an attribute ordered after it.
         """
         # Arrange
-        source = create_main_dataset()
+        source = main_dataset
         dataset = Dataset()
         for element in source:
             if element.tag < SOPInstanceUIDTag:
@@ -518,9 +520,11 @@ class TestWsiDataset:
         # Assert
         assert is_supported_image_type
 
-    def test_is_supported_image_type_missing_sop_class_uid_returns_false(self) -> None:
+    def test_is_supported_image_type_missing_sop_class_uid_returns_false(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange
-        dataset = create_main_dataset()
+        dataset = main_dataset
         del dataset.SOPClassUID
 
         # Act
@@ -529,9 +533,11 @@ class TestWsiDataset:
         # Assert
         assert not is_supported_image_type
 
-    def test_is_supported_image_type_non_wsi_sop_class_returns_false(self) -> None:
+    def test_is_supported_image_type_non_wsi_sop_class_returns_false(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange
-        dataset = create_main_dataset()
+        dataset = main_dataset
         dataset.SOPClassUID = CTImageStorage
 
         # Act
@@ -550,10 +556,10 @@ class TestWsiDataset:
         ids=["unknown", "localizer", "too-few-values"],
     )
     def test_is_supported_image_type_unsupported_image_type_returns_false(
-        self, image_type: Sequence[str]
+        self, main_dataset: Dataset, image_type: Sequence[str]
     ) -> None:
         # Arrange
-        dataset = create_main_dataset()
+        dataset = main_dataset
         dataset.ImageType = image_type
 
         # Act
@@ -562,9 +568,11 @@ class TestWsiDataset:
         # Assert
         assert not is_supported_image_type
 
-    def test_is_supported_image_type_missing_image_type_returns_false(self) -> None:
+    def test_is_supported_image_type_missing_image_type_returns_false(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange — answered rather than raised, as a file is turned away by this
-        dataset = create_main_dataset()
+        dataset = main_dataset
         del dataset.ImageType
 
         # Act
@@ -573,9 +581,11 @@ class TestWsiDataset:
         # Assert
         assert not is_supported_image_type
 
-    def test_is_supported_supported_volume_returns_true(self) -> None:
+    def test_is_supported_supported_volume_returns_true(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange
-        dataset = create_main_dataset()
+        dataset = main_dataset
 
         # Act
         is_supported = WsiDataset.is_supported(dataset)
@@ -585,10 +595,10 @@ class TestWsiDataset:
 
     @pytest.mark.parametrize("attribute", WsiDataset.REQUIRED_ATTRIBUTES)
     def test_is_supported_missing_required_attribute_returns_false(
-        self, attribute: BaseTag
+        self, main_dataset: Dataset, attribute: BaseTag
     ) -> None:
         # Arrange
-        dataset = create_main_dataset()
+        dataset = main_dataset
         del dataset[attribute]
 
         # Act
@@ -597,9 +607,11 @@ class TestWsiDataset:
         # Assert
         assert not is_supported
 
-    def test_is_supported_missing_sop_class_uid_returns_false(self) -> None:
+    def test_is_supported_missing_sop_class_uid_returns_false(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange
-        dataset = create_main_dataset()
+        dataset = main_dataset
         del dataset.SOPClassUID
 
         # Act
@@ -608,9 +620,11 @@ class TestWsiDataset:
         # Assert
         assert not is_supported
 
-    def test_is_supported_non_wsi_sop_class_returns_false(self) -> None:
+    def test_is_supported_non_wsi_sop_class_returns_false(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange — the only SOP class check a source reading over the web makes
-        dataset = create_main_dataset()
+        dataset = main_dataset
         dataset.SOPClassUID = CTImageStorage
 
         # Act
@@ -619,9 +633,11 @@ class TestWsiDataset:
         # Assert
         assert not is_supported
 
-    def test_is_supported_unsupported_image_type_returns_false(self) -> None:
+    def test_is_supported_unsupported_image_type_returns_false(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange — answered rather than raised, as an instance is turned away by this
-        dataset = create_main_dataset()
+        dataset = main_dataset
         dataset.ImageType = ["DERIVED", "PRIMARY", "BADFLAVOR", "NONE"]
 
         # Act
@@ -640,10 +656,10 @@ class TestWsiDataset:
         ],
     )
     def test_is_supported_unsupported_pixel_format_returns_false(
-        self, attribute: str, value: int | str
+        self, main_dataset: Dataset, attribute: str, value: int | str
     ) -> None:
         # Arrange
-        dataset = create_main_dataset()
+        dataset = main_dataset
         setattr(dataset, attribute, value)
 
         # Act
@@ -652,9 +668,11 @@ class TestWsiDataset:
         # Assert
         assert not is_supported
 
-    def test_is_supported_16bit_grayscale_returns_true(self) -> None:
+    def test_is_supported_16bit_grayscale_returns_true(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange — 16-bit is supported for grayscale, just not for color
-        dataset = create_main_dataset()
+        dataset = main_dataset
         dataset.SamplesPerPixel = 1
         dataset.PhotometricInterpretation = "MONOCHROME2"
         dataset.BitsAllocated = 16
@@ -675,11 +693,11 @@ class TestWsiDataset:
         ids=["sop-class", "image-type"],
     )
     def test_is_supported_image_type_never_accepts_what_is_supported_rejects(
-        self, attribute: str, value: object
+        self, main_dataset: Dataset, attribute: str, value: object
     ) -> None:
         """The early check is a part of the whole one, so it can stand in for it."""
         # Arrange
-        dataset = create_main_dataset()
+        dataset = main_dataset
         setattr(dataset, attribute, value)
 
         # Act
@@ -690,9 +708,11 @@ class TestWsiDataset:
         assert not is_supported
         assert not is_supported_image_type
 
-    def test_as_tiled_full_preserves_xy_origin_and_sets_z(self) -> None:
-        # Arrange — create_main_dataset has an origin with x=60, y=10, no z.
-        dataset = WsiDataset(create_main_dataset())
+    def test_as_tiled_full_preserves_xy_origin_and_sets_z(
+        self, main_dataset: Dataset
+    ) -> None:
+        # Arrange — the main dataset has an origin with x=60, y=10, no z.
+        dataset = WsiDataset(main_dataset)
 
         # Act
         result = dataset.as_tiled_full([5.0], {"0": None}, Size(2, 2), 1)
@@ -703,9 +723,11 @@ class TestWsiDataset:
         assert float(origin.YOffsetInSlideCoordinateSystem) == 10.0
         assert float(origin.ZOffsetInSlideCoordinateSystem) == 5.0
 
-    def test_as_tiled_full_no_spurious_origin_when_absent_and_z_zero(self) -> None:
+    def test_as_tiled_full_no_spurious_origin_when_absent_and_z_zero(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange — a single plane at z=0 with no origin sequence.
-        source = create_main_dataset()
+        source = main_dataset
         del source.TotalPixelMatrixOriginSequence
         dataset = WsiDataset(source)
 
@@ -715,9 +737,11 @@ class TestWsiDataset:
         # Assert — no invalid (x/y-less) origin item is created.
         assert "TotalPixelMatrixOriginSequence" not in result.as_dataset()
 
-    def test_as_tiled_full_creates_valid_origin_when_absent_and_z_nonzero(self) -> None:
+    def test_as_tiled_full_creates_valid_origin_when_absent_and_z_nonzero(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange — a non-zero focal plane with no origin sequence.
-        source = create_main_dataset()
+        source = main_dataset
         del source.TotalPixelMatrixOriginSequence
         dataset = WsiDataset(source)
 
@@ -730,9 +754,11 @@ class TestWsiDataset:
         assert float(origin.YOffsetInSlideCoordinateSystem) == 0.0
         assert float(origin.ZOffsetInSlideCoordinateSystem) == 5.0
 
-    def test_as_tiled_full_writes_only_given_optical_paths(self) -> None:
+    def test_as_tiled_full_writes_only_given_optical_paths(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange — add a second optical path "1" to the source.
-        source = create_main_dataset()
+        source = main_dataset
         second_path = Dataset()
         second_path.OpticalPathIdentifier = "1"
         source.OpticalPathSequence.append(second_path)
@@ -749,10 +775,12 @@ class TestWsiDataset:
         assert identifiers == ["1"]
         assert result.as_dataset().NumberOfOpticalPaths == 1
 
-    def test_as_tiled_full_writes_optical_paths_in_given_order(self) -> None:
+    def test_as_tiled_full_writes_optical_paths_in_given_order(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange — items for two optical paths, as when each optical path of a
         # level is stored in its own instance and the dataset describes only one.
-        source = create_main_dataset()
+        source = main_dataset
         source.OpticalPathSequence[0].OpticalPathIdentifier = "1"
         dataset = WsiDataset(source)
         optical_paths = {}
@@ -772,10 +800,12 @@ class TestWsiDataset:
         assert identifiers == ["2", "1"]
         assert result.as_dataset().NumberOfOpticalPaths == 2
 
-    def test_as_tiled_full_keeps_own_optical_path_dataset(self) -> None:
+    def test_as_tiled_full_keeps_own_optical_path_dataset(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange — the dataset describes optical path "0", as when metadata has
         # been set on it, and another item for it is given.
-        source = create_main_dataset()
+        source = main_dataset
         source.OpticalPathSequence[0].OpticalPathDescription = "own"
         dataset = WsiDataset(source)
         given_optical_path_dataset = Dataset()
@@ -791,10 +821,12 @@ class TestWsiDataset:
         (optical_path_dataset,) = result.as_dataset().OpticalPathSequence
         assert optical_path_dataset.OpticalPathDescription == "own"
 
-    def test_as_tiled_full_counts_optical_path_without_dataset(self) -> None:
+    def test_as_tiled_full_counts_optical_path_without_dataset(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange — a source that describes no optical path, so its frames are of
         # optical path "0".
-        source = create_main_dataset()
+        source = main_dataset
         del source.OpticalPathSequence
         dataset = WsiDataset(source)
 
@@ -805,9 +837,11 @@ class TestWsiDataset:
         assert result.as_dataset().NumberOfOpticalPaths == 1
         assert "OpticalPathSequence" not in result.as_dataset()
 
-    def test_as_tiled_full_drops_slice_spacing_for_single_focal_plane(self) -> None:
+    def test_as_tiled_full_drops_slice_spacing_for_single_focal_plane(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange — a source with multi-plane slice spacing set.
-        source = create_main_dataset()
+        source = main_dataset
         source.SharedFunctionalGroupsSequence[0].PixelMeasuresSequence[
             0
         ].SpacingBetweenSlices = "2.0"
@@ -826,9 +860,10 @@ class TestWsiDataset:
 
     def test_optical_path_identifier_from_the_frame_wins_over_the_shared_groups(
         self,
+        main_dataset: Dataset,
     ) -> None:
         # Arrange - the standard place for it in a sparse image is the frame.
-        source = create_main_dataset()
+        source = main_dataset
         source.SharedFunctionalGroupsSequence[
             0
         ].OpticalPathIdentificationSequence = _optical_path_identification("shared")
@@ -842,10 +877,12 @@ class TestWsiDataset:
         # Assert
         assert identifier == "frame"
 
-    def test_optical_path_identifier_falls_back_to_the_shared_groups(self) -> None:
+    def test_optical_path_identifier_falls_back_to_the_shared_groups(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange - stating it once for all frames is not where the standard puts it,
         # but it is unambiguous, so a frame that states none is answered from there.
-        source = create_main_dataset()
+        source = main_dataset
         source.SharedFunctionalGroupsSequence[
             0
         ].OpticalPathIdentificationSequence = _optical_path_identification("shared")
@@ -857,9 +894,11 @@ class TestWsiDataset:
         # Assert - and not "0", the first optical path of the instance.
         assert identifier == "shared"
 
-    def test_optical_path_identifier_falls_back_to_the_optical_paths(self) -> None:
+    def test_optical_path_identifier_falls_back_to_the_optical_paths(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange - nothing states it per frame or once for all frames.
-        dataset = WsiDataset(create_main_dataset())
+        dataset = WsiDataset(main_dataset)
 
         # Act
         identifier = dataset.read_optical_path_identifier()
@@ -867,9 +906,11 @@ class TestWsiDataset:
         # Assert
         assert identifier == "0"
 
-    def test_z_offset_from_the_frame_wins_over_the_shared_groups(self) -> None:
+    def test_z_offset_from_the_frame_wins_over_the_shared_groups(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange - the standard place for it in a sparse image is the frame.
-        source = create_main_dataset()
+        source = main_dataset
         source.SharedFunctionalGroupsSequence[
             0
         ].PlanePositionSlideSequence = _plane_position(2.0)
@@ -883,9 +924,11 @@ class TestWsiDataset:
         # Assert
         assert z_offset == 1.0
 
-    def test_z_offset_falls_back_to_the_shared_groups(self) -> None:
+    def test_z_offset_falls_back_to_the_shared_groups(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange - one focal plane stated once for all frames rather than per frame.
-        source = create_main_dataset()
+        source = main_dataset
         source.SharedFunctionalGroupsSequence[
             0
         ].PlanePositionSlideSequence = _plane_position(2.0)
@@ -897,9 +940,9 @@ class TestWsiDataset:
         # Assert - and not the default of zero.
         assert z_offset == 2.0
 
-    def test_z_offset_falls_back_to_zero(self) -> None:
+    def test_z_offset_falls_back_to_zero(self, main_dataset: Dataset) -> None:
         # Arrange - nothing states it per frame or once for all frames.
-        dataset = WsiDataset(create_main_dataset())
+        dataset = WsiDataset(main_dataset)
 
         # Act
         z_offset = dataset.read_z_offset()
@@ -916,12 +959,13 @@ class TestWsiDataset:
     )
     def test_frame_positions_refuse_an_element_only_some_frames_state(
         self,
+        main_dataset: Dataset,
         z_offsets: Sequence[float | None],
         identifiers: Sequence[str | None],
     ) -> None:
         # Arrange - a macro in the per frame groups is in every frame or in none, so
         # there is no reading of this file that is better than a guess.
-        source = create_main_dataset()
+        source = main_dataset
         source.PerFrameFunctionalGroupsSequence = _per_frame_groups(
             z_offsets, identifiers
         )
@@ -941,13 +985,14 @@ class TestWsiDataset:
     )
     def test_frame_positions_of_an_element_every_frame_states_or_none_do(
         self,
+        main_dataset: Dataset,
         z_offsets: Sequence[float | None],
         identifiers: Sequence[str | None],
         expected_z: list[float] | None,
         expected_identifiers: list[str] | None,
     ) -> None:
         # Arrange
-        source = create_main_dataset()
+        source = main_dataset
         source.PerFrameFunctionalGroupsSequence = _per_frame_groups(
             z_offsets, identifiers
         )
@@ -968,10 +1013,12 @@ class TestWsiDataset:
             assert positions.optical_path_identifiers is not None
             assert list(positions.optical_path_identifiers) == expected_identifiers
 
-    def test_frame_positions_refuse_more_than_one_optical_path_identifier(self) -> None:
+    def test_frame_positions_refuse_more_than_one_optical_path_identifier(
+        self, main_dataset: Dataset
+    ) -> None:
         # Arrange - Optical Path Identification Sequence holds a single item, so which
         # path a frame stating several is on cannot be told.
-        source = create_main_dataset()
+        source = main_dataset
         frames = DicomSequence()
         for identifiers in (["0", "1"], ["2", "3"]):
             position = Dataset()
