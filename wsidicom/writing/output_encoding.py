@@ -137,9 +137,13 @@ class EncodingResolver:
             per pixel do not match those of the image data.
         """
         if self._transcoder is not None and self._force_transcoding:
+            # The user wants every tile decoded and encoded again with the transcoder.
             return self._transcoded(self._transcoder, image_data)
         if image_data.transcoder is not None:
+            # The image data can only give decoded tiles, so they must be encoded.
             return self._transcoded(
+                # The transcoder of the user, if it asks for another transfer
+                # syntax, and else the own transcoder of the image data.
                 self._transcoder
                 if self._transcoder is not None
                 and image_data.transfer_syntax != self._transcoder.transfer_syntax
@@ -149,8 +153,10 @@ class EncodingResolver:
         if self._recoder is not None and self._recoder.supports_transfer_syntax(
             image_data.transfer_syntax
         ):
+            # The tiles can be changed without decoding them, so their pixels are kept.
+            encoder = self._generated_tiles_encoder(image_data)
             return RecodedEncoding(
-                self._recoder.matching_encoder(image_data.encoder),
+                encoder,
                 self._recoder.transfer_syntax,
                 self._recoder,
             )
@@ -158,10 +164,11 @@ class EncodingResolver:
             self._transcoder is not None
             and image_data.transfer_syntax != self._transcoder.transfer_syntax
         ):
+            # The tiles are in another transfer syntax than the user asks for.
             return self._transcoded(self._transcoder, image_data)
-        return CopiedEncoding(
-            self._matching_encoder(image_data.encoder), image_data.transfer_syntax
-        )
+        # The tiles are already in the transfer syntax asked for, or none was.
+        encoder = self._generated_tiles_encoder(image_data)
+        return CopiedEncoding(encoder, image_data.transfer_syntax)
 
     def _transcoded(
         self, transcoder: Encoder, image_data: ImageData
@@ -174,16 +181,37 @@ class EncodingResolver:
             If the bits or samples per pixel of the encoder do not match those of
             the image data.
         """
-        if (
-            transcoder.bits != image_data.bits
-            or transcoder.samples_per_pixel != image_data.samples_per_pixel
-        ):
+        if not self._can_encode(transcoder, image_data):
             raise ValueError(
                 "Transcode settings must match image data bits and "
                 "photometric interpretation."
             )
         transcoder = self._matching_encoder(transcoder)
         return TranscodedEncoding(transcoder, transcoder.transfer_syntax)
+
+    def _generated_tiles_encoder(self, image_data: ImageData) -> Encoder:
+        """Return the encoder for levels generated from image data kept encoded.
+
+        The tiles of the generated levels are new, so they are encoded with the
+        transcoder if it can encode the pixels of the image data, and else with
+        the encoder of the image data. Either is matched to the recoder.
+        """
+        if self._transcoder is not None and self._can_encode(
+            self._transcoder, image_data
+        ):
+            return self._matching_encoder(self._transcoder)
+        return self._matching_encoder(image_data.encoder)
+
+    @staticmethod
+    def _can_encode(encoder: Encoder, image_data: ImageData) -> bool:
+        """Return True if an encoder can encode the decoded pixels of image data.
+
+        That is, if its bits and samples per pixel are those of the image data.
+        """
+        return (
+            encoder.bits == image_data.bits
+            and encoder.samples_per_pixel == image_data.samples_per_pixel
+        )
 
     def _matching_encoder(self, encoder: Encoder) -> Encoder:
         """Return the encoder to encode new tiles with in place of an encoder.

@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `WsiDicom.read_encoded_tile()` reads a tile of a local DICOM file with a single read at its byte range, instead of through the level, instance and image data. Tiles to be cropped are read as before. Local files are read through a pool of file handles, so reads from several threads no longer wait for each other.
 - Only DICOMweb instances cache encoded frames. `Settings.encoded_frame_cache_size` is renamed `web_encoded_frame_cache_size`.
 - Assembling a region from tiles moved from `WsiInstance.get_region()` to `ImageData.get_decoded_region()`, which image data can override for more efficient reading.
+- Saving with `transcoding`, the levels generated from a level that is copied are encoded with the transcoding settings rather than with the encoding of the source, if those settings can encode its pixels.
 - Arrays read with `as_array=True` are read-only. They could share memory with a cached tile, so writing into one changed what later reads returned. Copy the array to modify it.
 
 ### Removed

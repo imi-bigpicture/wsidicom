@@ -19,6 +19,7 @@ from decoy import Decoy
 from pydicom.uid import UID, JPEG2000Lossless, JPEGBaseline8Bit
 
 from wsidicom.codec import (
+    Channels,
     Encoder,
     Jpeg2kSettings,
     JpegSettings,
@@ -95,7 +96,42 @@ class TestEncodingResolver:
         encoding = resolver.resolve(image_data)
 
         # Assert
-        assert encoding == CopiedEncoding(jpeg_encoder, JPEGBaseline8Bit)
+        assert encoding == CopiedEncoding(transcoder, JPEGBaseline8Bit)
+
+    def test_generated_tiles_of_copied_source_are_encoded_with_transcoder(
+        self, decoy: Decoy, jpeg_encoder: Encoder
+    ) -> None:
+        # Arrange
+        image_data = create_image_data(decoy, jpeg_encoder, JPEGBaseline8Bit)
+        transcoder = Encoder.create_for_settings(JpegSettings(quality=95))
+        resolver = EncodingResolver(transcoder, False)
+
+        # Act
+        encoding = resolver.resolve(image_data)
+
+        # Assert
+        assert isinstance(encoding, CopiedEncoding)
+        assert encoding.generated_tiles_encoder is transcoder
+
+    def test_generated_tiles_fall_back_to_source_encoder_if_transcoder_can_not(
+        self, decoy: Decoy, jpeg_2000_encoder: Encoder
+    ) -> None:
+        # Arrange
+        # The transcoder is in the transfer syntax of the source, so the tiles
+        # are copied, but it encodes 16-bit pixels and the source has 8 bits.
+        image_data = create_image_data(decoy, jpeg_2000_encoder, JPEG2000Lossless)
+        transcoder = Encoder.create_for_settings(
+            Jpeg2kSettings(levels=0, bits=16, channels=Channels.GRAYSCALE)
+        )
+        assert transcoder.transfer_syntax == JPEG2000Lossless
+        resolver = EncodingResolver(transcoder, False)
+
+        # Act
+        encoding = resolver.resolve(image_data)
+
+        # Assert
+        assert isinstance(encoding, CopiedEncoding)
+        assert encoding.generated_tiles_encoder is jpeg_2000_encoder
 
     def test_transcoder_in_other_transfer_syntax_transcodes_tiles(
         self, decoy: Decoy, jpeg_encoder: Encoder, jpeg_2000_encoder: Encoder
