@@ -382,9 +382,9 @@ class EncodedLevelWriter:
     transfer_syntax: UID
     """Transfer syntax of the tiles of the level."""
     transcoder: Encoder | None
-    """Encoder the tiles of the source are encoded again with.
+    """Encoder the tiles of the level are encoded with when written.
 
-    None if the pixels keep the encoding of the source.
+    None if the tiles keep the encoding of the source.
     """
 
 
@@ -1331,8 +1331,13 @@ class PyramidFileWriter(BaseFileWriter):
             dataset = self._build_dataset(
                 source_group, planes, paths, scale, level_index
             )
-            if encoding.transcoder is not None:
-                dataset = dataset.update_for_transcoding(encoding.transcoder, scale)
+            # The tiles of a generated level are always newly encoded, as they are
+            # downsampled, while those of the source level only if transcoded.
+            level_encoder = (
+                encoding.transcoder if in_source else encoding.generated_tiles_encoder
+            )
+            if level_encoder is not None:
+                dataset = dataset.update_for_transcoding(level_encoder, scale)
 
             if in_source:
                 # Source level: create tile reader, referencing next accumulator
@@ -1427,7 +1432,7 @@ class PyramidFileWriter(BaseFileWriter):
             bucket_writers[generated_level] = EncodedLevelWriter(
                 generated_level_writer,
                 encoding.generated_tiles_encoder.transfer_syntax,
-                encoding.transcoder,
+                encoding.generated_tiles_encoder,
             )
 
         return [bucket_writers[level_index] for level_index in sorted(bucket_writers)]

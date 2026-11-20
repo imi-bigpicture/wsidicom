@@ -264,6 +264,60 @@ class TestWsiDicomFileTargetIntegration:
         return frame[index + 1]
 
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
+    def test_generated_levels_of_copied_source_are_marked_as_encoded_again(
+        self,
+        wsi_name: str,
+        wsi_factory: Callable[[str], WsiDicom],
+        tmp_path: Path,
+        uid_generator: CallableUidGenerator,
+    ) -> None:
+        # Arrange
+        wsi = wsi_factory(wsi_name)
+        encoder = wsi.pyramids[0].base_level.default_instance.image_data.encoder
+        if encoder.lossy_method is None:
+            pytest.skip("The base level is not lossy compressed")
+
+        # Act
+        with WsiDicomFileTarget(
+            tmp_path,
+            uid_generator,
+            1,
+            None,
+            OffsetTableType.BASIC,
+            None,
+            None,
+            False,
+            True,
+        ) as target:
+            target.save(wsi.pyramids, None, None, True)
+
+        # Assert
+        with WsiDicom.open(tmp_path) as saved_wsi:
+            generated_levels = saved_wsi.pyramids[0].levels[1:]
+            assert len(generated_levels) > 0
+            for level in generated_levels:
+                dataset = level.default_instance.dataset
+                image_data = level.default_instance.image_data
+                compressed_size = sum(
+                    len(image_data.get_encoded_tile(Point(x, y), focal_plane, path))
+                    for focal_plane in image_data.focal_planes
+                    for path in image_data.optical_paths
+                    for y in range(image_data.tiled_size.height)
+                    for x in range(image_data.tiled_size.width)
+                )
+                uncompressed_size = (
+                    dataset.frame_count
+                    * image_data.tile_size.area
+                    * image_data.samples_per_pixel
+                    * (image_data.bits // 8)
+                )
+                assert dataset.lossy_compressed
+                assert dataset.lossy_compression_methods == [encoder.lossy_method.value]
+                assert dataset.lossy_compression_ratios == [
+                    pytest.approx(uncompressed_size / compressed_size, rel=0.01)
+                ]
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
     def test_save_levels_add_missing(
         self,
         wsi_name: str,
