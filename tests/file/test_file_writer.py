@@ -39,7 +39,7 @@ from wsidicom.geometry import Point
 from wsidicom.group import Instances
 from wsidicom.instance import ImageData, WsiInstance
 from wsidicom.metadata.uid_generator import UidGenerator
-from wsidicom.options import InstanceSplit
+from wsidicom.options import InstanceSplit, TranscodingMode
 from wsidicom.series import Pyramid
 from wsidicom.writing.output_encoding import EncodingResolver
 
@@ -57,7 +57,7 @@ class SplitOnlyWriter(BaseFileWriter):
         super().__init__(
             output_path=UPath("."),
             uid_generator=None,  # type: ignore[arg-type]
-            encoding_resolver=EncodingResolver(None, False),
+            encoding_resolver=EncodingResolver(None, TranscodingMode.MATCH),
             offset_table=None,
             instance_number_start=0,
             instance_split=instance_split,
@@ -368,7 +368,7 @@ class TestPyramidFileWriterIntegration:
             pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
-            encoding_resolver=EncodingResolver(None, False),
+            encoding_resolver=EncodingResolver(None, TranscodingMode.MATCH),
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
         )
@@ -401,7 +401,7 @@ class TestPyramidFileWriterIntegration:
             pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
-            encoding_resolver=EncodingResolver(None, False),
+            encoding_resolver=EncodingResolver(None, TranscodingMode.MATCH),
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
         )
@@ -443,7 +443,7 @@ class TestPyramidFileWriterIntegration:
             pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
-            encoding_resolver=EncodingResolver(None, False),
+            encoding_resolver=EncodingResolver(None, TranscodingMode.MATCH),
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
             add_missing_levels=False,
@@ -479,7 +479,7 @@ class TestPyramidFileWriterIntegration:
             pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
-            encoding_resolver=EncodingResolver(None, False),
+            encoding_resolver=EncodingResolver(None, TranscodingMode.MATCH),
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
         )
@@ -518,7 +518,7 @@ class TestPyramidFileWriterIntegration:
             pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
-            encoding_resolver=EncodingResolver(None, False),
+            encoding_resolver=EncodingResolver(None, TranscodingMode.MATCH),
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
         )
@@ -610,7 +610,7 @@ class TestPyramidFileWriterIntegration:
                 pyramid_index=0,
                 output_path=UPath(output_path),
                 uid_generator=uid_generator,
-                encoding_resolver=EncodingResolver(None, False),
+                encoding_resolver=EncodingResolver(None, TranscodingMode.MATCH),
                 max_threads=4,
                 offset_table=OffsetTableType.BASIC,
             ).write()
@@ -686,7 +686,7 @@ class TestPyramidFileWriterIntegration:
                 pyramid_index=0,
                 output_path=UPath(output_path),
                 uid_generator=uid_generator,
-                encoding_resolver=EncodingResolver(transcoder, False),
+                encoding_resolver=EncodingResolver(transcoder, TranscodingMode.MATCH),
                 max_threads=4,
                 offset_table=OffsetTableType.BASIC,
                 add_missing_levels=False,
@@ -734,7 +734,7 @@ class TestPyramidFileWriterBottomUpIntegration:
             pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
-            encoding_resolver=EncodingResolver(None, False),
+            encoding_resolver=EncodingResolver(None, TranscodingMode.MATCH),
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
         )
@@ -767,7 +767,7 @@ class TestPyramidFileWriterBottomUpIntegration:
             pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
-            encoding_resolver=EncodingResolver(None, False),
+            encoding_resolver=EncodingResolver(None, TranscodingMode.MATCH),
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
         )
@@ -806,7 +806,7 @@ class TestPyramidFileWriterBottomUpSequentialIntegration:
             pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
-            encoding_resolver=EncodingResolver(None, False),
+            encoding_resolver=EncodingResolver(None, TranscodingMode.MATCH),
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
             source_workers=1,
@@ -840,7 +840,7 @@ class TestPyramidFileWriterBottomUpSequentialIntegration:
             pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
-            encoding_resolver=EncodingResolver(None, False),
+            encoding_resolver=EncodingResolver(None, TranscodingMode.MATCH),
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
             source_workers=1,
@@ -922,7 +922,7 @@ class TestPyramidFileWriterFailFast:
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
-            encoding_resolver=EncodingResolver(failing_encoder, True),
+            encoding_resolver=EncodingResolver(failing_encoder, TranscodingMode.ALWAYS),
             offset_table=OffsetTableType.BASIC,
             source_workers=source_workers,
         )
@@ -998,7 +998,7 @@ class TestPyramidFileWriterFailFast:
             pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
-            encoding_resolver=EncodingResolver(None, False),
+            encoding_resolver=EncodingResolver(None, TranscodingMode.MATCH),
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
             source_workers=source_workers,

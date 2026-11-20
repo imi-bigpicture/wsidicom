@@ -21,6 +21,7 @@ from pydicom.uid import UID
 
 from wsidicom.codec import Encoder, Recoder, Settings
 from wsidicom.instance import ImageData
+from wsidicom.options import TranscodingMode
 
 
 @dataclass(frozen=True)
@@ -79,7 +80,7 @@ class EncodingResolver:
     """Resolves how the tiles of each source are encoded when written."""
 
     def __init__(
-        self, transcoding: Settings | Encoder | None, force_transcoding: bool
+        self, transcoding: Settings | Encoder | None, mode: TranscodingMode
     ) -> None:
         """Create a resolver for transcoding settings or an encoder.
 
@@ -90,9 +91,8 @@ class EncodingResolver:
             encoder created for them. If None, the encoding of each source is
             kept. If a recoder applies to the settings, the tiles it can recode
             are recoded rather than copied or transcoded.
-        force_transcoding: bool
-            If True, transcode every source, also sources already in the transfer
-            syntax of the transcoder or that could be recoded.
+        mode: TranscodingMode
+            Which sources are transcoded with the transcoder.
 
         Raises
         ------
@@ -105,7 +105,7 @@ class EncodingResolver:
         else:
             transcoder = transcoding
         self._transcoder = transcoder
-        self._force_transcoding = force_transcoding
+        self._mode = mode
         self._recoder = (
             Recoder.create_for_settings(transcoder.settings)
             if transcoder is not None
@@ -115,10 +115,11 @@ class EncodingResolver:
     def resolve(self, image_data: ImageData) -> OutputEncoding:
         """Return how the tiles of image data are encoded when written.
 
-        The tiles are transcoded if transcoding is forced or if the image data
-        can only give decoded tiles. Otherwise they are recoded if the recoder
-        can recode them, transcoded if they are in another transfer syntax than
-        the transcoder, and else copied.
+        The tiles are transcoded if the mode is to always transcode or if the
+        image data can only give decoded tiles. Otherwise they are recoded if
+        the recoder can recode them, transcoded if the mode is to match the
+        transcoder and they are in another transfer syntax than it, and else
+        copied.
 
         Parameters
         ----------
@@ -136,7 +137,7 @@ class EncodingResolver:
             If the tiles are transcoded with an encoder whose bits or samples
             per pixel do not match those of the image data.
         """
-        if self._transcoder is not None and self._force_transcoding:
+        if self._transcoder is not None and self._mode == TranscodingMode.ALWAYS:
             # The user wants every tile decoded and encoded again with the transcoder.
             return self._transcoded(self._transcoder, image_data)
         if image_data.transcoder is not None:
@@ -161,12 +162,14 @@ class EncodingResolver:
                 self._recoder,
             )
         if (
-            self._transcoder is not None
+            self._mode == TranscodingMode.MATCH
+            and self._transcoder is not None
             and image_data.transfer_syntax != self._transcoder.transfer_syntax
         ):
             # The tiles are in another transfer syntax than the user asks for.
             return self._transcoded(self._transcoder, image_data)
-        # The tiles are already in the transfer syntax asked for, or none was.
+        # The tiles are already in the transfer syntax asked for, none was asked
+        # for, or they are kept in their own.
         encoder = self._generated_tiles_encoder(image_data)
         return CopiedEncoding(encoder, image_data.transfer_syntax)
 

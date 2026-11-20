@@ -42,7 +42,7 @@ from wsidicom.group import Level
 from wsidicom.instance import ImageData, WsiInstance
 from wsidicom.metadata import ImageCoordinateSystem, LossyCompression
 from wsidicom.metadata.uid_generator import UidGenerator
-from wsidicom.options import InstanceSplit
+from wsidicom.options import InstanceSplit, TranscodingMode
 from wsidicom.series import Pyramid
 from wsidicom.writing.output_encoding import EncodingResolver
 
@@ -299,7 +299,7 @@ def write_pyramid(
             pyramid_index=0,
             output_path=UPath(output_path),
             uid_generator=uid_generator,
-            encoding_resolver=EncodingResolver(None, False),
+            encoding_resolver=EncodingResolver(None, TranscodingMode.MATCH),
             max_threads=1,
             offset_table=OffsetTableType.BASIC,
             add_missing_levels=False,

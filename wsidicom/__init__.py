@@ -45,6 +45,7 @@ from wsidicom.options import (
     ConcatenationByBytes,
     ConcatenationByFrames,
     InstanceSplit,
+    TranscodingMode,
 )
 from wsidicom.series import Labels, Overviews, Pyramid
 from wsidicom.web import WsiDicomWebClient
@@ -73,6 +74,7 @@ __all__ = [
     "PolylineAnnotationGroup",
     "Pyramid",
     "Settings",
+    "TranscodingMode",
     "WsiAssociatedFile",
     "WsiDataset",
     "WsiDicom",

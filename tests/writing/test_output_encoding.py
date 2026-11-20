@@ -26,6 +26,7 @@ from wsidicom.codec import (
 )
 from wsidicom.codec.recoder import JpegOptimizer
 from wsidicom.instance import ImageData
+from wsidicom.options import TranscodingMode
 from wsidicom.writing.output_encoding import (
     CopiedEncoding,
     EncodingResolver,
@@ -75,7 +76,7 @@ class TestEncodingResolver:
     ) -> None:
         # Arrange
         image_data = create_image_data(decoy, jpeg_encoder, JPEGBaseline8Bit)
-        resolver = EncodingResolver(None, False)
+        resolver = EncodingResolver(None, TranscodingMode.MATCH)
 
         # Act
         encoding = resolver.resolve(image_data)
@@ -90,7 +91,7 @@ class TestEncodingResolver:
         # Arrange
         image_data = create_image_data(decoy, jpeg_encoder, JPEGBaseline8Bit)
         transcoder = Encoder.create_for_settings(JpegSettings(quality=90))
-        resolver = EncodingResolver(transcoder, False)
+        resolver = EncodingResolver(transcoder, TranscodingMode.MATCH)
 
         # Act
         encoding = resolver.resolve(image_data)
@@ -104,7 +105,7 @@ class TestEncodingResolver:
         # Arrange
         image_data = create_image_data(decoy, jpeg_encoder, JPEGBaseline8Bit)
         transcoder = Encoder.create_for_settings(JpegSettings(quality=95))
-        resolver = EncodingResolver(transcoder, False)
+        resolver = EncodingResolver(transcoder, TranscodingMode.MATCH)
 
         # Act
         encoding = resolver.resolve(image_data)
@@ -124,7 +125,7 @@ class TestEncodingResolver:
             Jpeg2kSettings(levels=0, bits=16, channels=Channels.GRAYSCALE)
         )
         assert transcoder.transfer_syntax == JPEG2000Lossless
-        resolver = EncodingResolver(transcoder, False)
+        resolver = EncodingResolver(transcoder, TranscodingMode.MATCH)
 
         # Act
         encoding = resolver.resolve(image_data)
@@ -138,7 +139,7 @@ class TestEncodingResolver:
     ) -> None:
         # Arrange
         image_data = create_image_data(decoy, jpeg_2000_encoder, JPEG2000Lossless)
-        resolver = EncodingResolver(jpeg_encoder, False)
+        resolver = EncodingResolver(jpeg_encoder, TranscodingMode.MATCH)
 
         # Act
         encoding = resolver.resolve(image_data)
@@ -153,7 +154,7 @@ class TestEncodingResolver:
         # Arrange
         image_data = create_image_data(decoy, jpeg_2000_encoder, JPEG2000Lossless)
         settings = JpegSettings(quality=90)
-        resolver = EncodingResolver(settings, False)
+        resolver = EncodingResolver(settings, TranscodingMode.MATCH)
 
         # Act
         encoding = resolver.resolve(image_data)
@@ -163,13 +164,13 @@ class TestEncodingResolver:
         assert encoding.generated_tiles_encoder.settings == settings
         assert encoding.transfer_syntax == JPEGBaseline8Bit
 
-    def test_forced_transcoding_transcodes_tiles_in_same_transfer_syntax(
+    def test_always_transcoding_transcodes_tiles_in_same_transfer_syntax(
         self, decoy: Decoy, jpeg_encoder: Encoder
     ) -> None:
         # Arrange
         image_data = create_image_data(decoy, jpeg_encoder, JPEGBaseline8Bit)
         transcoder = Encoder.create_for_settings(JpegSettings(quality=90))
-        resolver = EncodingResolver(transcoder, True)
+        resolver = EncodingResolver(transcoder, TranscodingMode.ALWAYS)
 
         # Act
         encoding = resolver.resolve(image_data)
@@ -184,7 +185,35 @@ class TestEncodingResolver:
         image_data = create_image_data(
             decoy, jpeg_2000_encoder, JPEG2000Lossless, transcoder=jpeg_encoder
         )
-        resolver = EncodingResolver(None, False)
+        resolver = EncodingResolver(None, TranscodingMode.MATCH)
+
+        # Act
+        encoding = resolver.resolve(image_data)
+
+        # Assert
+        assert encoding == TranscodedEncoding(jpeg_encoder, JPEGBaseline8Bit)
+
+    def test_transcoding_when_required_copies_tiles_in_other_transfer_syntax(
+        self, decoy: Decoy, jpeg_encoder: Encoder, jpeg_2000_encoder: Encoder
+    ) -> None:
+        # Arrange
+        image_data = create_image_data(decoy, jpeg_2000_encoder, JPEG2000Lossless)
+        resolver = EncodingResolver(jpeg_encoder, TranscodingMode.WHEN_REQUIRED)
+
+        # Act
+        encoding = resolver.resolve(image_data)
+
+        # Assert
+        assert encoding == CopiedEncoding(jpeg_encoder, JPEG2000Lossless)
+
+    def test_transcoding_when_required_transcodes_image_data_that_needs_it(
+        self, decoy: Decoy, jpeg_encoder: Encoder, jpeg_2000_encoder: Encoder
+    ) -> None:
+        # Arrange
+        image_data = create_image_data(
+            decoy, jpeg_2000_encoder, JPEG2000Lossless, transcoder=jpeg_2000_encoder
+        )
+        resolver = EncodingResolver(jpeg_encoder, TranscodingMode.WHEN_REQUIRED)
 
         # Act
         encoding = resolver.resolve(image_data)
@@ -198,7 +227,7 @@ class TestEncodingResolver:
         # Arrange
         image_data = create_image_data(decoy, jpeg_2000_encoder, JPEG2000Lossless)
         transcoder = Encoder.create_for_settings(JpegSettings(bits=12))
-        resolver = EncodingResolver(transcoder, False)
+        resolver = EncodingResolver(transcoder, TranscodingMode.MATCH)
 
         # Act & Assert
         with pytest.raises(ValueError, match="must match image data bits"):
@@ -214,7 +243,7 @@ class TestEncodingResolverOptimizingJpeg:
         # Arrange
         image_data = create_image_data(decoy, jpeg_encoder, JPEGBaseline8Bit)
         transcoder = Encoder.create_for_settings(JpegSettings(optimize=True))
-        resolver = EncodingResolver(transcoder, False)
+        resolver = EncodingResolver(transcoder, TranscodingMode.MATCH)
 
         # Act
         encoding = resolver.resolve(image_data)
@@ -225,13 +254,28 @@ class TestEncodingResolverOptimizingJpeg:
         assert encoding.transfer_syntax == JPEGBaseline8Bit
         assert encoding.transcoder is None
 
+    def test_transcoding_when_required_recodes_jpeg_baseline_tiles(
+        self, decoy: Decoy, jpeg_encoder: Encoder
+    ) -> None:
+        # Arrange
+        image_data = create_image_data(decoy, jpeg_encoder, JPEGBaseline8Bit)
+        transcoder = Encoder.create_for_settings(JpegSettings(optimize=True))
+        resolver = EncodingResolver(transcoder, TranscodingMode.WHEN_REQUIRED)
+
+        # Act
+        encoding = resolver.resolve(image_data)
+
+        # Assert
+        assert isinstance(encoding, RecodedEncoding)
+        assert encoding.transfer_syntax == JPEGBaseline8Bit
+
     def test_generated_tiles_of_recoded_source_are_optimized(
         self, decoy: Decoy, jpeg_encoder: Encoder
     ) -> None:
         # Arrange
         image_data = create_image_data(decoy, jpeg_encoder, JPEGBaseline8Bit)
         transcoder = Encoder.create_for_settings(JpegSettings(optimize=True))
-        resolver = EncodingResolver(transcoder, False)
+        resolver = EncodingResolver(transcoder, TranscodingMode.MATCH)
 
         # Act
         encoding = resolver.resolve(image_data)
@@ -252,7 +296,7 @@ class TestEncodingResolverOptimizingJpeg:
             decoy, jpeg_encoder, JPEGBaseline8Bit, transcoder=jpeg_encoder
         )
         transcoder = Encoder.create_for_settings(JpegSettings(optimize=True))
-        resolver = EncodingResolver(transcoder, False)
+        resolver = EncodingResolver(transcoder, TranscodingMode.MATCH)
 
         # Act
         encoding = resolver.resolve(image_data)

@@ -32,6 +32,7 @@ from wsidicom.codec.recoder import JpegOptimizer
 from wsidicom.file import OffsetTableType, WsiDicomFileTarget
 from wsidicom.geometry import Point
 from wsidicom.metadata.uid_generator import CallableUidGenerator
+from wsidicom.options import TranscodingMode
 from wsidicom.series import Pyramid, Pyramids
 
 
@@ -98,14 +99,14 @@ class TestWsiDicomFileTargetIntegration:
 
     @pytest.mark.parametrize("settings", [Jpeg2kSettings(), JpegSettings()])
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
-    @pytest.mark.parametrize("force_transcoding", [False, True])
+    @pytest.mark.parametrize("transcoding_mode", list(TranscodingMode))
     def test_transcode(
         self,
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         settings: Settings,
-        force_transcoding: bool,
+        transcoding_mode: TranscodingMode,
         uid_generator: CallableUidGenerator,
     ) -> None:
         # Arrange
@@ -114,8 +115,14 @@ class TestWsiDicomFileTargetIntegration:
             0
         ].default_instance.image_data.transfer_syntax
         transcoder = Encoder.create_for_settings(settings)
-        expect_transcoding = force_transcoding or (
-            original_transfer_syntax != transcoder.transfer_syntax
+        expect_transcoding = transcoding_mode == TranscodingMode.ALWAYS or (
+            transcoding_mode == TranscodingMode.MATCH
+            and original_transfer_syntax != transcoder.transfer_syntax
+        )
+        expected_transfer_syntax = (
+            transcoder.transfer_syntax
+            if expect_transcoding
+            else original_transfer_syntax
         )
 
         # Act
@@ -130,7 +137,7 @@ class TestWsiDicomFileTargetIntegration:
             False,
             False,
             transcoder,
-            force_transcoding,
+            transcoding_mode,
         ) as target:
             target.save(wsi.pyramids, None, None, True)
 
@@ -140,7 +147,7 @@ class TestWsiDicomFileTargetIntegration:
             level = saved_wsi.pyramids[0].base_level
             assert (
                 level.default_instance.image_data.transfer_syntax
-                == transcoder.transfer_syntax
+                == expected_transfer_syntax
             )
             assert level.default_instance.dataset.lossy_compressed
             original_methods = (

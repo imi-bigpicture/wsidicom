@@ -20,6 +20,7 @@ from typing import Self
 from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
 from wsidicom.metadata.uid_generator import UidGenerator
+from wsidicom.options import TranscodingMode
 from wsidicom.series import Labels, Overviews, Pyramids
 from wsidicom.writing.output_encoding import EncodingResolver
 
@@ -40,7 +41,7 @@ class Target(metaclass=ABCMeta):
         add_missing_levels: bool = False,
         regenerate_pyramid: bool = False,
         transcoding: EncoderSettings | Encoder | None = None,
-        force_transcoding: bool = False,
+        transcoding_mode: TranscodingMode = TranscodingMode.MATCH,
     ) -> None:
         """Initiate a target.
 
@@ -65,9 +66,9 @@ class Target(metaclass=ABCMeta):
         transcoding: EncoderSettings | Encoder | None = None
             Optional settings or encoder for transcoding image data. If None, image data
             will be copied as is.
-        force_transcoding: bool = False
-            If to force transcoding even if transfer syntax already matches the encoding
-            settings.
+        transcoding_mode: TranscodingMode = TranscodingMode.MATCH
+            Which images are transcoded with `transcoding`. By default those in
+            another transfer syntax than it, see `TranscodingMode`.
         """
         self._uid_generator = uid_generator
         self._workers = workers
@@ -76,7 +77,7 @@ class Target(metaclass=ABCMeta):
         self._add_missing_levels = add_missing_levels
         self._regenerate_pyramid = regenerate_pyramid
         self._instance_number = 1
-        self._encoding_resolver = EncodingResolver(transcoding, force_transcoding)
+        self._encoding_resolver = EncodingResolver(transcoding, transcoding_mode)
         self.__enter__()
 
     @abstractmethod

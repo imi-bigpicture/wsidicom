@@ -60,6 +60,7 @@ from wsidicom.options import (
     ConcatenationByBytes,
     ConcatenationByFrames,
     InstanceSplit,
+    TranscodingMode,
 )
 from wsidicom.plane_tile_readers import PlaneTileReaders
 from wsidicom.series import Labels, Overviews, Pyramid, Pyramids
@@ -264,7 +265,7 @@ class WsiDicom:
         regenerate_pyramid: bool = False,
         label: Image | str | Path | UPath | None = None,
         transcoding: EncoderSettings | Encoder | None = None,
-        force_transcoding: bool = False,
+        transcoding_mode: TranscodingMode = TranscodingMode.MATCH,
         file_options: dict[str, Any] | None = None,
         metadata: WsiMetadata | None = None,
         replace_metadata: bool = True,
@@ -324,9 +325,9 @@ class WsiDicom:
         transcoding: EncoderSettings | Encoder | None = None,
             Optional settings or encoder for transcoding image data. If None, image data
             will be copied as is.
-        force_transcoding: bool = False
-            If to force transcoding even if transfer syntax already matches the encoding
-            settings.
+        transcoding_mode: TranscodingMode = TranscodingMode.MATCH
+            Which images are transcoded with `transcoding`. By default those in
+            another transfer syntax than it, see `TranscodingMode`.
         file_options: dict[str, Any] | None = None
             Optional options for saving files to output path.
         metadata: WsiMetadata | None = None
@@ -409,7 +410,7 @@ class WsiDicom:
                 add_missing_levels,
                 regenerate_pyramid,
                 transcoding,
-                force_transcoding,
+                transcoding_mode,
                 file_options,
                 metadata,
                 replace_metadata,

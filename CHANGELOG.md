@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Assembling a region from tiles moved from `WsiInstance.get_region()` to `ImageData.get_decoded_region()`, which image data can override for more efficient reading.
 - Saving with `transcoding`, the levels generated from a level that is copied are encoded with the transcoding settings rather than with the encoding of the source, if those settings can encode its pixels.
 - Arrays read with `as_array=True` are read-only. They could share memory with a cached tile, so writing into one changed what later reads returned. Copy the array to modify it.
+- `save()` takes `transcoding_mode` instead of `force_transcoding`. `TranscodingMode.ALWAYS` replaces `force_transcoding=True`, and the new `TranscodingMode.WHEN_REQUIRED` transcodes only images that must be encoded, copying the others in their own transfer syntax.
 
 ### Removed
 
