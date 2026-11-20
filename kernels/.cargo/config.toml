@@ -1,0 +1,4 @@
+# Loops aligned to 64 bytes on x86-64, so a hot loop's speed does not depend
+# on where unrelated code changes happen to place it.
+[target.'cfg(target_arch = "x86_64")']
+rustflags = ["-C", "llvm-args=-align-loops=64"]

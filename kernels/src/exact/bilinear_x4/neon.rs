@@ -1,0 +1,323 @@
+//! The NEON kernel of the exact x4 bilinear reduction.
+//!
+//! NEON is baseline on aarch64, gated only by the `set_simd` kill switch.
+//! The kernel checks its arguments; the `unsafe fn` here require the bounds
+//! their docs state.
+
+use std::arch::aarch64::{
+    uint8x16_t, uint8x16x3_t, uint16x4_t, uint16x8_t, uint16x8x4_t, vaddq_u16, vaddq_u32,
+    vcombine_u8, vcombine_u16, vdup_n_u8, vdupq_n_u16, vdupq_n_u32, vextq_u16, vget_high_u8,
+    vget_high_u16, vget_low_u8, vget_low_u16, vgetq_lane_u32, vld1q_u8, vld1q_u16, vld3q_u8,
+    vld4q_u16, vmlal_high_n_u16, vmlal_n_u16, vmlal_u8, vmovl_u16, vmovn_u16, vmull_high_n_u16,
+    vmull_n_u16, vmull_u8, vqtbl1q_u8, vreinterpretq_u32_u8, vrshrn_n_u32, vst1_u8, vst1q_u8,
+    vst1q_u16, vst3q_u8, vst4q_u16, vuzp1q_u8,
+};
+
+use super::{TAPS, divide_rounded, output_scalar, row_scalar, window};
+use crate::sample::{RGB, RGBX};
+use crate::simd::cover_row;
+
+/// Samples per vertical step: u8 rows into two registers of u16 sums.
+const VERTICAL_BLOCK: usize = 16;
+/// Samples per horizontal step: two registers of u32 sums.
+const HORIZONTAL_BLOCK: usize = 8;
+/// Inputs of a window before the output's own: o reads 4o - 2 ..= 4o + 5.
+const LEAD: usize = 2;
+/// A full window's weight total along one axis.
+const FULL_TOTAL: u32 = 32;
+
+/// Rows with a full window: the vertical sums of the 8 rows in u16 (at most
+/// 32 x 255), then the 8-tap horizontal sums in u32, rounded by `vrshrn` by
+/// 10. Wide enough rows take the horizontal pass only at the outputs;
+/// narrower ones at every sample, keeping every 4th pixel. Clipped columns,
+/// and clipped or too short rows, by the scalar reference's arithmetic.
+///
+/// Panics unless `src` holds a `width` x `height` image of 1 or 3 channels,
+/// whose sizes are multiples of 4.
+#[target_feature(enable = "neon")]
+pub(crate) fn bilinear_x4_neon(
+    src: &[u8],
+    width: usize,
+    height: usize,
+    channels: usize,
+) -> Vec<u8> {
+    let (out_width, out_height, row_samples) = (width / 4, height / 4, width * channels);
+    crate::exact::assert_exact_image::<_, 4>(src, width, height, channels);
+    let mut out_buf = crate::cpu::unwritten_output::<u8>(out_width * out_height * channels);
+    // SAFETY: u8 has no invalid values; every sample is written below before
+    // the vector is returned.
+    let out = unsafe {
+        std::slice::from_raw_parts_mut(
+            out_buf.as_mut_ptr().cast::<u8>(),
+            out_width * out_height * channels,
+        )
+    };
+    let mut scalar_sums = vec![0u32; row_samples];
+    // LEAD zero pixels before the row and room after it for the offset loads
+    // (those lanes only feed the clipped edge pixels).
+    let lead = LEAD * channels;
+    let mut sums = vec![0u16; lead + row_samples + (TAPS.len() - LEAD) * channels];
+    // The rounded 8-tap sums at every sample.
+    let mut full = vec![0u8; row_samples];
+    let weights = TAPS.map(|weight| weight as u8);
+    let color_outputs = channels == RGB && out_width >= 2 + COLOR_OUTPUTS;
+    let mut sums_rgbx = vec![0u16; if color_outputs { RGBX * width } else { 0 }];
+    let clipped_columns: Vec<usize> = (0..out_width)
+        .filter(|&output| window(output, width).1.len() < TAPS.len())
+        .collect();
+    for y in 0..out_height {
+        let (first_row, vertical_weights) = window(y, height);
+        let dst = &mut out[y * out_width * channels..(y + 1) * out_width * channels];
+        if vertical_weights.len() < TAPS.len() || row_samples < VERTICAL_BLOCK {
+            row_scalar(src, (width, height, channels), y, &mut scalar_sums, dst);
+            continue;
+        }
+        let rows: [&[u8]; 8] =
+            std::array::from_fn(|tap| &src[(first_row + tap) * row_samples..][..row_samples]);
+        let vertical_sums = |samples: [uint8x16_t; 8]| {
+            let mut low = vmull_u8(vget_low_u8(samples[0]), vdup_n_u8(weights[0]));
+            let mut high = vmull_u8(vget_high_u8(samples[0]), vdup_n_u8(weights[0]));
+            for (row, &weight) in samples.iter().zip(&weights).skip(1) {
+                low = vmlal_u8(low, vget_low_u8(*row), vdup_n_u8(weight));
+                high = vmlal_u8(high, vget_high_u8(*row), vdup_n_u8(weight));
+            }
+            (low, high)
+        };
+        if color_outputs {
+            let sums_ptr = sums_rgbx.as_mut_ptr();
+            let zero = vdupq_n_u16(0);
+            cover_row(width, VERTICAL_BLOCK, |pixel| {
+                // SAFETY: pixel + 16 <= width: 16 pixels of each row.
+                let planes = rows.map(|row| unsafe { vld3q_u8(row.as_ptr().add(pixel * RGB)) });
+                let (red_low, red_high) = vertical_sums(planes.map(|split| split.0));
+                let (green_low, green_high) = vertical_sums(planes.map(|split| split.1));
+                let (blue_low, blue_high) = vertical_sums(planes.map(|split| split.2));
+                // SAFETY: pixel + 16 <= width: inside the RGBX row of sums.
+                unsafe {
+                    let low = uint16x8x4_t(red_low, green_low, blue_low, zero);
+                    vst4q_u16(sums_ptr.add(pixel * RGBX), low);
+                    let high = uint16x8x4_t(red_high, green_high, blue_high, zero);
+                    vst4q_u16(sums_ptr.add((pixel + 8) * RGBX), high);
+                }
+            });
+        } else {
+            let sums_ptr = sums[lead..].as_mut_ptr();
+            cover_row(row_samples, VERTICAL_BLOCK, |x| {
+                // SAFETY: x + 16 <= row_samples: 16 samples of each row.
+                let (low, high) =
+                    vertical_sums(rows.map(|row| unsafe { vld1q_u8(row.as_ptr().add(x)) }));
+                // SAFETY: x + 16 <= row_samples: inside the row of sums.
+                unsafe {
+                    vst1q_u16(sums_ptr.add(x), low);
+                    vst1q_u16(sums_ptr.add(x + 8), high);
+                }
+            });
+        }
+        if color_outputs {
+            // SAFETY: sums_rgbx holds the row's `width` = 4 out_width RGBX
+            // vertical sums, dst out_width RGB outputs.
+            unsafe { horizontal_color(sums_rgbx.as_ptr(), out_width, dst) };
+            for output in [0, out_width - 1] {
+                clipped_color_output(&sums_rgbx, width, output, dst);
+            }
+            continue;
+        }
+        let sums_ptr = sums[lead..].as_ptr();
+        if channels == 1 && out_width >= 2 + PHASED_OUTPUTS {
+            // SAFETY: sums holds the row's `width` = 4 out_width vertical sums
+            // from sums_ptr, dst out_width outputs.
+            unsafe { horizontal_phased(sums_ptr, out_width, dst) };
+        } else {
+            let full_ptr = full.as_mut_ptr();
+            cover_row(row_samples, HORIZONTAL_BLOCK, |x| {
+                let (mut low, mut high) = (vdupq_n_u32(0), vdupq_n_u32(0));
+                for (tap, &weight) in TAPS.iter().enumerate() {
+                    let offset = x as isize + (tap as isize - LEAD as isize) * channels as isize;
+                    // SAFETY: x + 8 <= row_samples; the offsets reach LEAD
+                    // pixels before the row (the zero lead) and 5 past it (the
+                    // room after).
+                    let window_sums = unsafe { vld1q_u16(sums_ptr.offset(offset)) };
+                    let weight = weight as u16;
+                    low = vmlal_n_u16(low, vget_low_u16(window_sums), weight);
+                    high = vmlal_n_u16(high, vget_high_u16(window_sums), weight);
+                }
+                let rounded = vcombine_u16(vrshrn_n_u32::<10>(low), vrshrn_n_u32::<10>(high));
+                // SAFETY: x + 8 <= row_samples, the length of `full`; the means
+                // are bytes.
+                unsafe { vst1_u8(full_ptr.add(x), vmovn_u16(rounded)) };
+            });
+            keep_every_fourth_pixel(&full, channels, out_width, dst);
+        }
+        for &output in &clipped_columns {
+            output_scalar(&sums[lead..], (width, channels), FULL_TOTAL, output, dst);
+        }
+    }
+    // SAFETY: every row wrote all of its samples.
+    unsafe { crate::cpu::written_output(out_buf) }
+}
+
+/// Output pixels per step of `horizontal_phased`.
+const PHASED_OUTPUTS: usize = 8;
+
+/// A gray row's horizontal pass at the outputs whose windows are full
+/// (`1..out_width - 1`): `vld4` splits the vertical sums into the 4 pixel
+/// phases, so output o's taps 4o - 2 ..= 4o + 5 are phases 2, 3 of o - 1, all
+/// four of o, and 0, 1 of o + 1, summed in symmetric pairs (each at most 2 x
+/// 8160, u16), then weighted in u32.
+///
+/// # Safety
+/// `sums` points at the row's `4 out_width` vertical sums and `dst` holds
+/// `out_width` outputs, `out_width >= 2 + PHASED_OUTPUTS`.
+#[target_feature(enable = "neon")]
+unsafe fn horizontal_phased(sums: *const u16, out_width: usize, dst: &mut [u8]) {
+    let dst_ptr = dst.as_mut_ptr();
+    cover_row(out_width - 2, PHASED_OUTPUTS, |index| {
+        let output = 1 + index;
+        // SAFETY: 1 <= output and output + 8 <= out_width - 1, so the loads
+        // read the phases of outputs output - 1 .. output + 9: sums 4 (output -
+        // 1) .. 4 (output + 9) <= 4 out_width.
+        let [before, center, after] =
+            [output - 1, output, output + 1].map(|first| unsafe { vld4q_u16(sums.add(4 * first)) });
+        let pairs = [
+            vaddq_u16(before.2, after.1),
+            vaddq_u16(before.3, after.0),
+            vaddq_u16(center.0, center.3),
+            vaddq_u16(center.1, center.2),
+        ];
+        let weights = [TAPS[0], TAPS[1], TAPS[2], TAPS[3]].map(|weight| weight as u16);
+        let mut low = vmull_n_u16(vget_low_u16(pairs[0]), weights[0]);
+        let mut high = vmull_high_n_u16(pairs[0], weights[0]);
+        for (pair, &weight) in pairs.iter().zip(&weights).skip(1) {
+            low = vmlal_n_u16(low, vget_low_u16(*pair), weight);
+            high = vmlal_high_n_u16(high, *pair, weight);
+        }
+        let rounded = vcombine_u16(vrshrn_n_u32::<10>(low), vrshrn_n_u32::<10>(high));
+        // SAFETY: output + 8 <= out_width: outputs of the row.
+        unsafe { vst1_u8(dst_ptr.add(output), vmovn_u16(rounded)) };
+    });
+}
+
+/// Output pixels per step of `horizontal_color`.
+const COLOR_OUTPUTS: usize = 4;
+
+/// One output pixel of a color row from its RGBX vertical sums: the 8
+/// window pixels as 4 registers of 2 pixels, summed in pixel pairs of equal
+/// weight (the last two registers' pixels swapped by `vextq`: -2 + 5, -1 + 4
+/// weighted 1 and 3; 0 + 3, 1 + 2 weighted 5 and 7), then weighted in u32.
+///
+/// # Safety
+/// `sums` points at the RGBX vertical sums of pixels `4 output - 2 ..
+/// 4 output + 6`.
+#[target_feature(enable = "neon")]
+#[inline]
+unsafe fn color_output(sums: *const u16) -> uint16x4_t {
+    // SAFETY: the window's 8 RGBX pixels (the caller's contract).
+    let pairs: [uint16x8_t; 4] = [0, 1, 2, 3].map(|pair| unsafe { vld1q_u16(sums.add(8 * pair)) });
+    let outer = vaddq_u16(pairs[0], vextq_u16::<4>(pairs[3], pairs[3]));
+    let inner = vaddq_u16(pairs[1], vextq_u16::<4>(pairs[2], pairs[2]));
+    let low = vmlal_n_u16(
+        vmovl_u16(vget_low_u16(outer)),
+        vget_low_u16(inner),
+        TAPS[2] as u16,
+    );
+    let high = vmlal_high_n_u16(
+        vmull_high_n_u16(outer, TAPS[1] as u16),
+        inner,
+        TAPS[3] as u16,
+    );
+    vrshrn_n_u32::<10>(vaddq_u32(low, high))
+}
+
+/// An RGB row's horizontal pass at the outputs whose windows are full
+/// (`1..out_width - 1`), 3 of each 4 RGBX bytes kept by `vqtbl1q`.
+///
+/// # Safety
+/// `sums` points at the row's `4 out_width` RGBX vertical sums and `dst` holds
+/// `out_width` RGB outputs, `out_width >= 2 + COLOR_OUTPUTS`.
+#[target_feature(enable = "neon")]
+unsafe fn horizontal_color(sums: *const u16, out_width: usize, dst: &mut [u8]) {
+    const RGB_BYTES: [u8; 16] = [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, 16, 16, 16, 16];
+    // SAFETY: the 16 bytes of the constant.
+    let rgb_bytes = unsafe { vld1q_u8(RGB_BYTES.as_ptr()) };
+    let dst_ptr = dst.as_mut_ptr();
+    cover_row(out_width - 2, COLOR_OUTPUTS, |index| {
+        let first = 1 + index;
+        // SAFETY: 1 <= first and first + 4 <= out_width - 1, so every window's
+        // pixels 4 output - 2 .. 4 output + 6 lie within the row's 4 out_width.
+        let outputs: [uint16x4_t; 4] = std::array::from_fn(|output| unsafe {
+            color_output(sums.add(RGBX * (4 * (first + output) - LEAD)))
+        });
+        let rgbx = vcombine_u8(
+            vmovn_u16(vcombine_u16(outputs[0], outputs[1])),
+            vmovn_u16(vcombine_u16(outputs[2], outputs[3])),
+        );
+        let rgb = vqtbl1q_u8(rgbx, rgb_bytes);
+        // SAFETY: first + 4 <= out_width: 12 bytes of the row's outputs.
+        unsafe {
+            vst1_u8(dst_ptr.add(first * RGB), vget_low_u8(rgb));
+            let last = vgetq_lane_u32::<2>(vreinterpretq_u32_u8(rgb));
+            dst_ptr
+                .add(first * RGB + 8)
+                .cast::<u32>()
+                .write_unaligned(last);
+        }
+    });
+}
+
+/// Output `output` of an RGB row from its RGBX vertical sums, by the scalar
+/// reference's arithmetic.
+fn clipped_color_output(sums: &[u16], width: usize, output: usize, dst: &mut [u8]) {
+    let (first_column, horizontal_weights) = window(output, width);
+    let denominator = FULL_TOTAL * horizontal_weights.iter().sum::<u32>();
+    for channel in 0..RGB {
+        let numerator: u32 = horizontal_weights
+            .iter()
+            .enumerate()
+            .map(|(tap, &weight)| weight * u32::from(sums[(first_column + tap) * RGBX + channel]))
+            .sum();
+        dst[output * RGB + channel] = divide_rounded(numerator, denominator);
+    }
+}
+
+/// `dst[o]` = pixel `4 o` of `full`: `vld1`/`vld3` split the channel planes
+/// and two `vuzp1` levels keep every 4th lane.
+///
+/// Panics unless `channels` is 1 or 3, `full` holds `4 * out_width` pixels and
+/// `dst` `out_width`.
+#[target_feature(enable = "neon")]
+fn keep_every_fourth_pixel(full: &[u8], channels: usize, out_width: usize, dst: &mut [u8]) {
+    const STEP_PIXELS: usize = 16;
+    crate::exact::assert_kept_pixels::<_, 4>(full, channels, out_width, dst);
+    let (full_ptr, dst_ptr) = (full.as_ptr(), dst.as_mut_ptr());
+    let every_fourth_lane = |plane: [uint8x16_t; 4]| {
+        vuzp1q_u8(vuzp1q_u8(plane[0], plane[1]), vuzp1q_u8(plane[2], plane[3]))
+    };
+    let mut output = 0usize;
+    while output + STEP_PIXELS <= out_width {
+        let at = 4 * output * channels;
+        // SAFETY: output + 16 <= out_width: the loads read pixels 4 output ..
+        // 4 output + 64 of full, the store output pixels output .. + 16.
+        unsafe {
+            if channels == 1 {
+                let plane = [0, 1, 2, 3].map(|block| vld1q_u8(full_ptr.add(at + 16 * block)));
+                vst1q_u8(dst_ptr.add(output), every_fourth_lane(plane));
+            } else {
+                let blocks = [0, 1, 2, 3].map(|block| vld3q_u8(full_ptr.add(at + 48 * block)));
+                let planes = uint8x16x3_t(
+                    every_fourth_lane(blocks.map(|split| split.0)),
+                    every_fourth_lane(blocks.map(|split| split.1)),
+                    every_fourth_lane(blocks.map(|split| split.2)),
+                );
+                vst3q_u8(dst_ptr.add(output * RGB), planes);
+            }
+        }
+        output += STEP_PIXELS;
+    }
+    for output in output..out_width {
+        let at = 4 * output * channels;
+        dst[output * channels..(output + 1) * channels].copy_from_slice(&full[at..at + channels]);
+    }
+}
+
+// The rounding shift by 10 divides by a full 2D window's total.
+const _: () = assert!(FULL_TOTAL * FULL_TOTAL == 1 << 10);

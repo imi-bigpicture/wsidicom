@@ -1,0 +1,146 @@
+//! x86 helpers shared by the exact kernels.
+//!
+//! `keep_even_pixels` checks its row lengths, so it needs only AVX2; its
+//! loads and stores are justified against those at their loop guards.
+
+/// Runs `step_at(start)` for steps of `step` covering `0..len`
+/// (`len >= step`), the last one shifted back to end at `len`.
+#[inline(always)]
+pub(crate) fn cover_steps(len: usize, step: usize, step_at: &impl Fn(usize)) {
+    let mut start = 0;
+    loop {
+        let at = start.min(len - step);
+        step_at(at);
+        if at + step >= len {
+            break;
+        }
+        start += step;
+    }
+}
+
+/// `dst` = the even pixels (`channels` samples each) of `full`.
+///
+/// Panics unless `channels` is 1 or 3 and `full` holds twice the pixels of
+/// `dst`.
+#[target_feature(enable = "avx2")]
+pub(crate) fn keep_even_pixels(full: &[u8], channels: usize, dst: &mut [u8]) {
+    use std::arch::x86_64::*;
+    crate::exact::assert_kept_pixels::<_, 2>(full, channels, dst.len() / channels, dst);
+    let out_width = dst.len() / channels;
+    let (full_ptr, dst_ptr) = (full.as_ptr(), dst.as_mut_ptr());
+    let mut output = 0;
+    match channels {
+        1 => {
+            let even_bytes: [i8; 16] = [0, 2, 4, 6, 8, 10, 12, 14, -1, -1, -1, -1, -1, -1, -1, -1];
+            // SAFETY: both halves read the 16 bytes of `even_bytes`.
+            let shuffle = unsafe {
+                _mm256_loadu2_m128i(
+                    even_bytes.as_ptr() as *const __m128i,
+                    even_bytes.as_ptr() as *const __m128i,
+                )
+            };
+            while output + 16 <= out_width {
+                // SAFETY: output + 16 <= out_width (the loop guard): the load
+                // reads full[2 output..2 output + 32], within 2 out_width
+                // samples (the caller's contract).
+                let input =
+                    unsafe { _mm256_loadu_si256(full_ptr.add(2 * output) as *const __m256i) };
+                let kept = _mm256_shuffle_epi8(input, shuffle);
+                let packed = _mm256_permute4x64_epi64::<0b10_00>(kept);
+                // SAFETY: the store writes dst[output..output + 16], within
+                // out_width by the loop guard.
+                unsafe {
+                    _mm_storeu_si128(
+                        dst_ptr.add(output) as *mut __m128i,
+                        _mm256_castsi256_si128(packed),
+                    );
+                }
+                output += 16;
+            }
+        }
+        3 => {
+            // Each 16-byte half loads 6 pixels (from bytes 0 and 18) and keeps
+            // pixels 0, 2 and 4.
+            let even_pixels: [i8; 16] = [0, 1, 2, 6, 7, 8, 12, 13, 14, -1, -1, -1, -1, -1, -1, -1];
+            // SAFETY: both halves read the 16 bytes of `even_pixels`.
+            let shuffle = unsafe {
+                _mm256_loadu2_m128i(
+                    even_pixels.as_ptr() as *const __m128i,
+                    even_pixels.as_ptr() as *const __m128i,
+                )
+            };
+            // 16-byte stores at 9-byte steps: the last must stay in the row.
+            while output + 6 <= out_width && output * 3 + 9 + 16 <= dst.len() {
+                // SAFETY: output + 6 <= out_width (the loop guard): the loads
+                // read full[6 output..6 output + 34], within 6 out_width =
+                // 2 dst.len() samples (the caller's contract).
+                let input = unsafe {
+                    let at = full_ptr.add(2 * output * 3);
+                    _mm256_loadu2_m128i(at.add(18) as *const __m128i, at as *const __m128i)
+                };
+                let kept = _mm256_shuffle_epi8(input, shuffle);
+                // SAFETY: the stores write dst[3 output..3 output + 25], within
+                // dst.len() by the loop guard.
+                unsafe {
+                    _mm_storeu_si128(
+                        dst_ptr.add(output * 3) as *mut __m128i,
+                        _mm256_castsi256_si128(kept),
+                    );
+                    _mm_storeu_si128(
+                        dst_ptr.add(output * 3 + 9) as *mut __m128i,
+                        _mm256_extracti128_si256::<1>(kept),
+                    );
+                }
+                output += 6;
+            }
+        }
+        _ => unreachable!("{channels} channels"),
+    }
+    for output in output..out_width {
+        dst[output * channels..(output + 1) * channels]
+            .copy_from_slice(&full[2 * output * channels..2 * output * channels + channels]);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testing::{CHANNELS, Rng, random_samples};
+
+    #[test]
+    fn cover_steps_covers_every_output_within_bounds() {
+        for step in [1, 4, 16] {
+            for len in step..step * 5 {
+                let starts = std::cell::RefCell::new(Vec::new());
+                cover_steps(len, step, &|start| starts.borrow_mut().push(start));
+                let mut covered = vec![false; len];
+                for start in starts.into_inner() {
+                    assert!(start + step <= len, "step {step}, len {len}");
+                    covered[start..start + step].fill(true);
+                }
+                assert!(covered.iter().all(|&done| done), "step {step}, len {len}");
+            }
+        }
+    }
+
+    #[test]
+    fn keep_even_pixels_equals_reference() {
+        if !crate::testing::avx2_detected() {
+            return;
+        }
+        let mut rng = Rng::new(3);
+        for channels in CHANNELS {
+            for kept_pixels in 0..80 {
+                let full: Vec<u8> = random_samples(&mut rng, 2 * kept_pixels * channels);
+                let mut dst = vec![0; kept_pixels * channels];
+                // SAFETY: AVX2 is available.
+                unsafe { keep_even_pixels(&full, channels, &mut dst) };
+                let expected: Vec<u8> = full
+                    .chunks_exact(2 * channels)
+                    .flat_map(|pair| pair[..channels].to_vec())
+                    .collect();
+                assert_eq!(dst, expected, "{channels} channels, {kept_pixels} pixels");
+            }
+        }
+    }
+}

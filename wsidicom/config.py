@@ -57,8 +57,9 @@ class Settings:
     preferred_decoder: DecoderOption | None = None
     """Preferred decoder to use."""
     preferred_downsampler: DownsamplerOption | None = None
-    """Preferred downsampler to use. None selects the fastest available (opencv
-    when installed, else pillow)."""
+    """Preferred downsampler to use. None selects the fastest available for the
+    filter (kernels when installed, else opencv when installed and matching the
+    filter, else pillow)."""
     open_web_threads: int | None = None
     """Number of threads to use when opening web instances."""
     resampling_filter: ResampleFilterOption = ResampleFilterOption.BILINEAR

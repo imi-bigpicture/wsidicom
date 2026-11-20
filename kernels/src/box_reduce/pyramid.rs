@@ -1,0 +1,401 @@
+//! The power-of-2 box pyramid: chained 2x and fused 4x/8x box passes, band
+//! by band for interleaved images.
+
+use std::borrow::Cow;
+use std::mem::MaybeUninit;
+
+use super::BoxSample;
+use crate::cpu::{unwritten_output, written_output};
+use crate::sample::assert_image;
+
+/// A sample type's mean of a block from its exact sum, rounded half up (as
+/// the box kernels round).
+pub(crate) trait BlockMean: Sized {
+    fn block_mean(sum: f64, count: usize) -> Self;
+}
+
+/// `sum / count` rounded half up, for integer sums (exact in f64).
+fn rounded_mean(sum: f64, count: usize) -> u64 {
+    let (sum, count) = (sum as u64, count as u64);
+    (sum + count / 2) / count
+}
+
+impl BlockMean for u8 {
+    fn block_mean(sum: f64, count: usize) -> u8 {
+        rounded_mean(sum, count) as u8
+    }
+}
+
+impl BlockMean for u16 {
+    fn block_mean(sum: f64, count: usize) -> u16 {
+        rounded_mean(sum, count) as u16
+    }
+}
+
+/// The `2^times` box reduction at `ceil` size: the pyramid of the whole
+/// blocks, and where the factor doesn't divide the image, a last column and
+/// row of partial blocks, each the mean of the pixels it covers.
+pub(crate) fn box_downscale<T: BoxSample>(
+    src: &[T],
+    dims @ (width, height, channels): (usize, usize, usize),
+    times: u32,
+) -> (Vec<T>, usize, usize) {
+    let block = 1usize << times;
+    if height.is_multiple_of(block) && width.is_multiple_of(block) {
+        return box_pyramid(src, dims, times);
+    }
+    let (out_width, out_height) = (width.div_ceil(block), height.div_ceil(block));
+    let out_stride = out_width * channels;
+    let mut out = unwritten_output::<T>(out_height * out_stride);
+    if has_whole_blocks(dims, times) {
+        // SAFETY: `out` holds the whole blocks' `height >> times` rows of
+        // `width >> times` pixels, `out_stride` samples apart.
+        let in_place =
+            unsafe { box_pyramid_into(src, dims, times, out.as_mut_ptr().cast::<T>(), out_stride) };
+        if !in_place {
+            let (whole, whole_width, _) = box_pyramid(src, dims, times);
+            place_rows(&whole, whole_width * channels, &mut out, out_stride);
+        }
+    }
+    write_partial_blocks(src, dims, times, &mut out);
+    // SAFETY: the whole blocks and the partial ones cover every pixel.
+    (unsafe { written_output(out) }, out_width, out_height)
+}
+
+fn has_whole_blocks((width, height, _): (usize, usize, usize), times: u32) -> bool {
+    (height >> times) > 0 && (width >> times) > 0
+}
+
+/// Copies the rows of `rows` (each `row_len` samples) into `out`, `stride`
+/// samples apart from its start.
+fn place_rows<T: Copy>(rows: &[T], row_len: usize, out: &mut [MaybeUninit<T>], stride: usize) {
+    for (y, row) in rows.chunks_exact(row_len).enumerate() {
+        for (sample, &value) in out[y * stride..][..row_len].iter_mut().zip(row) {
+            sample.write(value);
+        }
+    }
+}
+
+/// Writes the partial blocks of a `2^times` reduction at `ceil` size into
+/// `out`: the blocks of the last column and row that the image ends inside.
+fn write_partial_blocks<T: BoxSample>(
+    src: &[T],
+    dims @ (width, height, channels): (usize, usize, usize),
+    times: u32,
+    out: &mut [MaybeUninit<T>],
+) {
+    let block = 1usize << times;
+    let (out_width, out_height) = (width.div_ceil(block), height.div_ceil(block));
+    let (whole_width, whole_height) = if has_whole_blocks(dims, times) {
+        (width >> times, height >> times)
+    } else {
+        (0, 0)
+    };
+    let mut sums = vec![0.0; channels];
+    for y in 0..out_height {
+        let first_partial = if y < whole_height { whole_width } else { 0 };
+        let rows = y * block..((y + 1) * block).min(height);
+        for x in first_partial..out_width {
+            let columns = x * block..((x + 1) * block).min(width);
+            sums.fill(0.0);
+            for row in rows.clone() {
+                let samples = &src[(row * width + columns.start) * channels
+                    ..(row * width + columns.end) * channels];
+                for (index, &sample) in samples.iter().enumerate() {
+                    sums[index % channels] += f64::from(sample.to_f32());
+                }
+            }
+            let count = rows.len() * columns.len();
+            let pixel = &mut out[(y * out_width + x) * channels..][..channels];
+            for (sample, &sum) in pixel.iter_mut().zip(&sums) {
+                sample.write(T::block_mean(sum, count));
+            }
+        }
+    }
+}
+
+/// Halvings that make `factor` a power-of-2 box reduction, if it is one.
+pub(crate) fn box_halvings(resample: &str, factor: usize) -> Option<u32> {
+    (resample == "box" && factor.is_power_of_two()).then(|| factor.trailing_zeros())
+}
+
+/// `times` successive 2x box halvings of a (width, height, channels) image ->
+/// (pixels, width, height), two levels per fused 4x pass while at least two
+/// remain, so an interleaved image equals its channels reduced as planar
+/// ones. Interleaved images of more than one pass go band by band.
+pub(crate) fn box_pyramid<T: BoxSample>(
+    src: &[T],
+    (width, height, channels): (usize, usize, usize),
+    times: u32,
+) -> (Vec<T>, usize, usize) {
+    if channels > 1 && hwc_pass_count(times) >= 2 {
+        return box_pyramid_banded(
+            src,
+            (width, height, channels),
+            times,
+            |band, width, height| box_levels(band, (width, height, channels), times),
+        );
+    }
+    box_levels(src, (width, height, channels), times)
+}
+
+/// `box_pyramid` written to `dst_ptr`, the output rows `dst_stride` samples
+/// apart, where the CPU has a kernel that writes them in place (a single 2x
+/// level): true if it did, false (nothing written) if not.
+///
+/// # Safety
+/// `dst_ptr` holds the output rows of `box_pyramid`'s result, `dst_stride`
+/// samples apart.
+pub(crate) unsafe fn box_pyramid_into<T: BoxSample>(
+    src: &[T],
+    dims: (usize, usize, usize),
+    times: u32,
+    dst_ptr: *mut T,
+    dst_stride: usize,
+) -> bool {
+    // SAFETY: the caller's contract.
+    times == 1 && unsafe { T::box2x_into(src, dims, dst_ptr, dst_stride) }
+}
+
+fn hwc_pass_count(times: u32) -> u32 {
+    if times >= 2 { times / 2 } else { times }
+}
+
+/// Levels the next interleaved pass halves with `left` to go: a fused 4x
+/// pass, the last one 8x when `left` is odd (the planar pyramid's 4x then
+/// 2x), or a lone 2x.
+fn next_pass_levels(left: u32) -> u32 {
+    match left {
+        0 | 1 => 1,
+        3 => 3,
+        _ => 2,
+    }
+}
+
+/// The pyramid's levels over a whole image (or band).
+fn box_levels<T: BoxSample>(
+    src: &[T],
+    (width, height, channels): (usize, usize, usize),
+    times: u32,
+) -> (Vec<T>, usize, usize) {
+    assert_image(src, width, height, channels);
+    let mut level = (Cow::Borrowed(src), width, height);
+    let mut left = times;
+    while left > 0 {
+        let (pixels, width, height) = (&level.0, level.1, level.2);
+        let (next, next_width, next_height) = if channels > 1 {
+            let levels = next_pass_levels(left);
+            left -= levels;
+            if levels > 1 {
+                T::box_levels_hwc(pixels, width, height, levels)
+            } else {
+                T::box2x_hwc(pixels, width, height)
+            }
+        } else if left >= 2 {
+            left -= 2;
+            T::box4x(pixels, width, height)
+        } else {
+            left -= 1;
+            T::box2x(pixels, width, height)
+        };
+        level = (Cow::Owned(next), next_width, next_height);
+    }
+    (level.0.into_owned(), level.1, level.2)
+}
+
+/// Input bytes per band of `box_pyramid_banded`, so its levels stay in L2.
+const BAND_BYTES: usize = 256 << 10;
+
+/// A `times`-level pyramid of an interleaved image one band of input rows at
+/// a time: each output row depends only on its own 2^times input rows, so
+/// running `levels` per band gives the same pixels while the intermediate
+/// levels stay cache-resident instead of full-size images written and read
+/// back.
+fn box_pyramid_banded<T: Copy, LevelsFn>(
+    src: &[T],
+    (width, height, channels): (usize, usize, usize),
+    times: u32,
+    levels: LevelsFn,
+) -> (Vec<T>, usize, usize)
+where
+    LevelsFn: Fn(&[T], usize, usize) -> (Vec<T>, usize, usize),
+{
+    let block = 1usize << times;
+    let (out_width, out_height) = (width >> times, height >> times);
+    let row_samples = width * channels;
+    let row_bytes = row_samples * std::mem::size_of::<T>();
+    let out_rows_per_band = (BAND_BYTES / (row_bytes * block).max(1)).max(1);
+    let mut out: Vec<T> = Vec::new();
+    for out_y in (0..out_height).step_by(out_rows_per_band) {
+        let band_out_rows = out_rows_per_band.min(out_height - out_y);
+        let band = &src[out_y * block * row_samples..(out_y + band_out_rows) * block * row_samples];
+        let (band_out, band_width, band_height) = levels(band, width, band_out_rows * block);
+        debug_assert!(band_width == out_width && band_height == band_out_rows);
+        if out.is_empty() {
+            out.reserve_exact(out_height * (band_out.len() / band_out_rows));
+        }
+        out.extend_from_slice(&band_out);
+    }
+    (out, out_width, out_height)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::box_reduce::box2x_scalar;
+    use crate::box_reduce::tests::{
+        BoxTestSample, assert_same_image, hwc_pyramid_reference, integer_differences, per_channel,
+        planar_pyramid_reference,
+    };
+    use crate::sample::RGB;
+    use crate::testing::{CHANNELS, Rng, random_samples, sizes_from, test_images};
+
+    /// What `box_pyramid` must return: the planar pyramid (fused 4x passes)
+    /// of every channel.
+    fn pyramid_reference<T: BoxTestSample>(
+        src: &[T],
+        (width, height, channels): (usize, usize, usize),
+        times: u32,
+    ) -> (Vec<T>, usize, usize) {
+        if channels == 1 {
+            planar_pyramid_reference(src, width, height, times)
+        } else {
+            hwc_pyramid_reference(src, (width, height, channels), times)
+        }
+    }
+
+    /// `times` scalar 2x halvings of every channel, each rounded.
+    fn chained_halvings<T: BoxTestSample>(
+        src: &[T],
+        (width, height, channels): (usize, usize, usize),
+        times: u32,
+    ) -> (Vec<T>, usize, usize) {
+        per_channel(src, (width, height, channels), |plane, width, height| {
+            let mut level = (plane.to_vec(), width, height);
+            for _ in 0..times {
+                level = box2x_scalar(&level.0, level.1, level.2);
+            }
+            level
+        })
+    }
+
+    fn assert_small_pyramids_match<T: BoxTestSample>() {
+        let mut rng = Rng::new(30);
+        for channels in CHANNELS {
+            for times in 0..=4 {
+                for (width, height) in sizes_from(1) {
+                    let dims = (width, height, channels);
+                    for (_, src) in test_images(&mut rng, width * height * channels, T::MAX) {
+                        assert_same_image(
+                            &box_pyramid(&src, dims, times),
+                            &pyramid_reference(&src, dims, times),
+                            &format!("{times} times, {width} x {height} x {channels}"),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn box_pyramid_equals_the_planar_pyramid_of_every_channel() {
+        assert_small_pyramids_match::<u8>();
+        assert_small_pyramids_match::<u16>();
+    }
+
+    /// An image of `channels`-sample pixels whose `times`-level pyramid
+    /// runs in two full bands and a partial one, with rows left over below
+    /// the last block: the banded path against the whole-image levels and
+    /// the reference.
+    fn assert_banded_pyramid_matches<T: BoxTestSample>(width: usize, channels: usize, times: u32) {
+        let block = 1usize << times;
+        let band_rows = BAND_BYTES / (width * channels * size_of::<T>() * block);
+        assert!(
+            band_rows >= 1,
+            "the image is too wide for bands of whole output rows"
+        );
+        let height = (2 * band_rows + band_rows / 2 + 1) * block + block - 1;
+        let dims = (width, height, channels);
+        assert!(hwc_pass_count(times) >= 2);
+        let mut rng = Rng::new(31);
+        let src: Vec<T> = random_samples(&mut rng, width * height * channels);
+        let context = format!("{times} times, {width} x {height} x {channels}");
+        let banded = box_pyramid(&src, dims, times);
+        assert_same_image(&banded, &box_levels(&src, dims, times), &context);
+        assert_same_image(&banded, &pyramid_reference(&src, dims, times), &context);
+    }
+
+    #[test]
+    fn banded_pyramids_equal_the_whole_image_levels() {
+        assert_banded_pyramid_matches::<u8>(100, RGB, 4);
+        assert_banded_pyramid_matches::<u8>(67, RGB, 5);
+        assert_banded_pyramid_matches::<u16>(70, RGB, 4);
+        assert_banded_pyramid_matches::<u16>(130, RGB, 6);
+    }
+
+    #[test]
+    fn one_halving_equals_the_scalar_halving() {
+        let mut rng = Rng::new(32);
+        for channels in CHANNELS {
+            for (width, height) in sizes_from(2) {
+                let dims = (width, height, channels);
+                let src: Vec<u8> = random_samples(&mut rng, width * height * channels);
+                assert_same_image(
+                    &box_pyramid(&src, dims, 1),
+                    &chained_halvings(&src, dims, 1),
+                    &format!("{width} x {height} x {channels}"),
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn fused_pyramids_differ_from_chained_halvings_by_at_most_one() {
+        // The documented rounding difference: a fused 4x rounds once where
+        // two chained halvings round twice.
+        let mut rng = Rng::new(33);
+        for channels in CHANNELS {
+            let (width, height) = (64, 64);
+            let dims = (width, height, channels);
+            let src: Vec<u8> = random_samples(&mut rng, width * height * channels);
+            let (largest, count) = integer_differences(
+                &box_pyramid(&src, dims, 2).0,
+                &chained_halvings(&src, dims, 2).0,
+            );
+            assert!(largest <= 1, "{channels} channels");
+            // Every tier fuses, so the difference is real on ordinary data.
+            assert!(count > 0, "{channels} channels");
+        }
+    }
+
+    #[test]
+    fn box_halvings_are_the_power_of_two_box_factors() {
+        assert_eq!(box_halvings("box", 1), Some(0));
+        assert_eq!(box_halvings("box", 2), Some(1));
+        assert_eq!(box_halvings("box", 64), Some(6));
+        assert_eq!(box_halvings("box", 3), None);
+        assert_eq!(box_halvings("box", 12), None);
+        assert_eq!(box_halvings("bilinear", 2), None);
+    }
+
+    #[test]
+    fn fused_passes_end_with_an_8x_pass_for_odd_levels() {
+        let pass_levels = |times: u32| {
+            let mut passes = Vec::new();
+            let mut left = times;
+            while left > 0 {
+                let levels = next_pass_levels(left);
+                passes.push(levels);
+                left -= levels;
+            }
+            passes
+        };
+        assert_eq!(pass_levels(1), [1]);
+        assert_eq!(pass_levels(3), [3]);
+        assert_eq!(pass_levels(5), [2, 3]);
+        assert_eq!(pass_levels(6), [2, 2, 2]);
+        for times in 0..8 {
+            assert_eq!(pass_levels(times).len() as u32, hwc_pass_count(times));
+        }
+    }
+}

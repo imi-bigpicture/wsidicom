@@ -91,3 +91,56 @@ jobs:
         run: uv sync --all-extras
       - name: Test with pytest.
         run: uv run pytest
+
+  kernels-tests:
+    name: kernels pytest ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # x86-64 and aarch64 (NEON) on Linux, Apple silicon, and Windows. The
+        # extension is abi3, so one Python version covers them all.
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          # wsidicom's lowest supported version: uv syncs the whole workspace.
+          python-version: "3.12"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.3
+      # --all-packages for the kernels dev group (Hypothesis).
+      - name: Install Application
+        run: uv sync --all-extras --all-packages
+      - name: Test with pytest.
+        run: uv run --all-packages pytest kernels/tests
+
+  rust-tests:
+    name: cargo test ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # x86-64 (AVX2 kernels where the runner has them) and
+        # aarch64 (NEON) on Linux, Apple silicon, and Windows.
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: kernels
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      # The test binary links the Python library (PyO3 without
+      # extension-module).
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      # A debug build: debug assertions and the standard library's checks on
+      # unchecked accesses are on, so an out-of-bounds kernel access fails.
+      - name: Cargo test
+        run: cargo test --lib
+        env:
+          PYO3_PYTHON: python

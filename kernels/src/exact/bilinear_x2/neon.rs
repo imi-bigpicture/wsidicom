@@ -1,0 +1,278 @@
+//! The NEON kernel of the exact x2 bilinear reduction.
+//!
+//! NEON is baseline on aarch64, gated only by the `set_simd` kill switch.
+//! The kernel checks its arguments; the `unsafe fn` here require the bounds
+//! their docs state.
+
+use std::arch::aarch64::{
+    uint8x8_t, uint8x8x3_t, uint8x16_t, uint16x8_t, vaddl_high_u8, vaddl_u8, vaddq_u16,
+    vcombine_u8, vextq_u16, vget_low_u8, vld1q_u8, vld1q_u16, vld3q_u8, vmlaq_n_u16, vrshrn_n_u16,
+    vst1_u8, vst1q_u8, vst1q_u16, vst3_u8, vuzp1q_u16, vuzp2q_u16,
+};
+
+use super::{horizontal_scalar, vertical_sums_scalar, window};
+use crate::exact::neon::{GrayPlanes, RgbPlanes, keep_even_pixels, output_from_rows};
+use crate::sample::RGB;
+use crate::simd::cover_row;
+
+/// Samples per vertical and horizontal step: two registers of u16 sums.
+const BLOCK: usize = 16;
+
+/// Rows with a full window of at least two fused blocks in one pass
+/// (`fused_row`); narrower ones as the vertical sums `row0 + row3 + 3 (row1 +
+/// row2)` in u16, then the rounded 4-tap sum at every sample (at most 64 x
+/// 255, `vrshrn` by 6), of which the even pixels are kept. Clipped columns
+/// from the same sums, and clipped or too short rows, by the scalar
+/// reference's arithmetic. Panics unless `src` holds a `width` x `height`
+/// image of 1 or 3 channels, of even sizes.
+#[target_feature(enable = "neon")]
+pub(crate) fn bilinear_x2_neon(
+    src: &[u8],
+    width: usize,
+    height: usize,
+    channels: usize,
+) -> Vec<u8> {
+    let (out_width, out_height, row_samples) = (width / 2, height / 2, width * channels);
+    crate::exact::assert_exact_image::<_, 2>(src, width, height, channels);
+    let mut out_buf = crate::cpu::unwritten_output::<u8>(out_width * out_height * channels);
+    // SAFETY: u8 has no invalid values; every sample is written below before
+    // the vector is returned.
+    let out = unsafe {
+        std::slice::from_raw_parts_mut(
+            out_buf.as_mut_ptr().cast::<u8>(),
+            out_width * out_height * channels,
+        )
+    };
+    let mut scalar_sums = vec![0u32; row_samples];
+    // A zero pixel before the row and room after it for the offset loads
+    // (those lanes only feed the edge pixels, done apart).
+    let mut sums = vec![0u16; channels + row_samples + 2 * channels];
+    // The rounded 4-tap sums at every sample.
+    let mut full = vec![0u8; row_samples];
+    for y in 0..out_height {
+        let (first_row, vertical_weights) = window(y, height);
+        let vertical_total: u32 = vertical_weights.iter().sum();
+        let dst = &mut out[y * out_width * channels..(y + 1) * out_width * channels];
+        if vertical_total != 8 || row_samples < BLOCK || out_width < 3 {
+            vertical_sums_scalar(
+                &src[first_row * row_samples..],
+                row_samples,
+                vertical_weights,
+                &mut scalar_sums,
+            );
+            horizontal_scalar(
+                &scalar_sums,
+                channels,
+                width,
+                vertical_total,
+                0..out_width,
+                dst,
+            );
+            continue;
+        }
+        let rows: [&[u8]; 4] =
+            std::array::from_fn(|tap| &src[(first_row + tap) * row_samples..][..row_samples]);
+        if width >= 2 * FUSED_BLOCK_PIXELS {
+            // SAFETY: the rows hold `width` pixels of `channels` (1 or 3)
+            // samples, at least two blocks; dst holds `out_width` outputs.
+            unsafe {
+                match channels {
+                    1 => fused_row::<1, GrayPlanes>(rows, width, dst),
+                    _ => fused_row::<RGB, RgbPlanes>(rows, width, dst),
+                }
+            }
+            continue;
+        }
+        let sums_ptr = sums[channels..].as_mut_ptr();
+        cover_row(row_samples, BLOCK, |x| {
+            // SAFETY: x + 16 <= row_samples: 16 samples of each row and of the
+            // sums.
+            unsafe {
+                let [top, upper, lower, bottom] = rows.map(|row| vld1q_u8(row.as_ptr().add(x)));
+                let low = vmlaq_n_u16(
+                    vaddl_u8(vget_low_u8(top), vget_low_u8(bottom)),
+                    vaddl_u8(vget_low_u8(upper), vget_low_u8(lower)),
+                    3,
+                );
+                let high = vmlaq_n_u16(vaddl_high_u8(top, bottom), vaddl_high_u8(upper, lower), 3);
+                vst1q_u16(sums_ptr.add(x), low);
+                vst1q_u16(sums_ptr.add(x + 8), high);
+            }
+        });
+        let sums_ptr = sums[channels..].as_ptr();
+        let full_ptr = full.as_mut_ptr();
+        cover_row(row_samples, BLOCK, |x| {
+            let tap_sums_at = |half: usize| {
+                // SAFETY: x + half + 8 <= row_samples; the offsets reach
+                // `channels` samples before the row (the zero lead) and 2
+                // `channels` past it (the room after).
+                let load = |offset: isize| unsafe {
+                    vld1q_u16(sums_ptr.offset((x + half) as isize + offset))
+                };
+                let (pixel, two_pixels) = (channels as isize, 2 * channels as isize);
+                vmlaq_n_u16(
+                    vaddq_u16(load(-pixel), load(two_pixels)),
+                    vaddq_u16(load(0), load(pixel)),
+                    3,
+                )
+            };
+            let rounded = vcombine_u8(
+                vrshrn_n_u16::<6>(tap_sums_at(0)),
+                vrshrn_n_u16::<6>(tap_sums_at(8)),
+            );
+            // SAFETY: x + 16 <= row_samples, the length of `full`.
+            unsafe { vst1q_u8(full_ptr.add(x), rounded) };
+        });
+        keep_even_pixels(&full, channels, out_width, dst);
+        for clipped_output in [0, out_width - 1] {
+            let clipped = clipped_output..clipped_output + 1;
+            horizontal_scalar(
+                &sums[channels..],
+                channels,
+                width,
+                vertical_total,
+                clipped,
+                dst,
+            );
+        }
+    }
+    // SAFETY: every row wrote all of its samples.
+    unsafe { crate::cpu::written_output(out_buf) }
+}
+
+const FUSED_BLOCK_PIXELS: usize = 16;
+
+/// One output row with a full vertical window, in one pass over its four
+/// rows: per block and channel plane, the vertical sums split by `uzp` into
+/// even and odd pixels `E`, `O`; output o is `O[o - 1] + 3 (E[o] + O[o]) +
+/// E[o + 1]`, the neighbours taken by `vext` from the previous and next
+/// blocks, rounded by `vrshrn` by 6. The last block overlaps its
+/// predecessor.
+///
+/// # Safety
+/// Each row holds `width >= 2 * FUSED_BLOCK_PIXELS` pixels of `CHANNELS`
+/// samples, `dst` `width / 2` outputs.
+#[target_feature(enable = "neon")]
+#[inline]
+unsafe fn fused_row<const CHANNELS: usize, Planes: BlockPlanes<CHANNELS>>(
+    rows: [&[u8]; 4],
+    width: usize,
+    dst: &mut [u8],
+) {
+    let out_width = width / 2;
+    let blocks = width / FUSED_BLOCK_PIXELS;
+    let row_ptrs = rows.map(<[u8]>::as_ptr);
+    // Per plane: (even, odd) pixels.
+    let block_sums = |pixel: usize| -> [(uint16x8_t, uint16x8_t); CHANNELS] {
+        // SAFETY: pixel + 16 <= width (every caller): the block lies in
+        // every row.
+        let [top, upper, lower, bottom] =
+            row_ptrs.map(|row| unsafe { Planes::load(row.add(pixel * CHANNELS)) });
+        std::array::from_fn(|plane| {
+            let (outer, inner) = ((top[plane], bottom[plane]), (upper[plane], lower[plane]));
+            let low = vmlaq_n_u16(
+                vaddl_u8(vget_low_u8(outer.0), vget_low_u8(outer.1)),
+                vaddl_u8(vget_low_u8(inner.0), vget_low_u8(inner.1)),
+                3,
+            );
+            let high = vmlaq_n_u16(
+                vaddl_high_u8(outer.0, outer.1),
+                vaddl_high_u8(inner.0, inner.1),
+                3,
+            );
+            (vuzp1q_u16(low, high), vuzp2q_u16(low, high))
+        })
+    };
+    let dst_ptr = dst.as_mut_ptr();
+    let outputs = |pixel: usize,
+                   previous_odd: [uint16x8_t; CHANNELS],
+                   current: [(uint16x8_t, uint16x8_t); CHANNELS],
+                   next_even: [uint16x8_t; CHANNELS]| {
+        let outputs: [uint8x8_t; CHANNELS] = std::array::from_fn(|plane| {
+            let (even, odd) = current[plane];
+            let outer = vaddq_u16(
+                vextq_u16::<7>(previous_odd[plane], odd),
+                vextq_u16::<1>(even, next_even[plane]),
+            );
+            vrshrn_n_u16::<6>(vmlaq_n_u16(outer, vaddq_u16(even, odd), 3))
+        });
+        // SAFETY: pixel + 16 <= width: outputs pixel / 2 .. pixel / 2 + 8
+        // of the row.
+        unsafe { Planes::store(dst_ptr.add(pixel / 2 * CHANNELS), outputs) };
+    };
+    let odd_of = |sums: [(uint16x8_t, uint16x8_t); CHANNELS]| sums.map(|(_, odd)| odd);
+    let even_of = |sums: [(uint16x8_t, uint16x8_t); CHANNELS]| sums.map(|(even, _)| even);
+    // The first block's previous and the last block's next pixels feed only
+    // the clipped outputs, rewritten below; a block's own sums stand in.
+    let mut current = block_sums(0);
+    let mut previous_odd = odd_of(current);
+    for block in 0..blocks {
+        let pixel = block * FUSED_BLOCK_PIXELS;
+        let next = if block + 1 < blocks {
+            block_sums(pixel + FUSED_BLOCK_PIXELS)
+        } else {
+            current
+        };
+        outputs(pixel, previous_odd, current, even_of(next));
+        previous_odd = odd_of(current);
+        current = next;
+    }
+    if !width.is_multiple_of(FUSED_BLOCK_PIXELS) {
+        let pixel = width - FUSED_BLOCK_PIXELS;
+        let last = block_sums(pixel);
+        outputs(
+            pixel,
+            odd_of(block_sums(pixel - FUSED_BLOCK_PIXELS)),
+            last,
+            even_of(last),
+        );
+    }
+    for output in [0, out_width - 1] {
+        output_from_rows(rows, (width, CHANNELS), output, dst);
+    }
+}
+
+/// A pixel layout's channel planes: 16 pixels split into them, 8 output
+/// pixels interleaved back.
+trait BlockPlanes<const CHANNELS: usize> {
+    /// # Safety
+    /// `src..src + 16 * CHANNELS` must be readable.
+    unsafe fn load(src: *const u8) -> [uint8x16_t; CHANNELS];
+
+    /// # Safety
+    /// `dst..dst + 8 * CHANNELS` must be writable.
+    unsafe fn store(dst: *mut u8, planes: [uint8x8_t; CHANNELS]);
+}
+
+impl BlockPlanes<1> for GrayPlanes {
+    #[target_feature(enable = "neon")]
+    #[inline]
+    unsafe fn load(src: *const u8) -> [uint8x16_t; 1] {
+        // SAFETY: the caller's contract.
+        [unsafe { vld1q_u8(src) }]
+    }
+
+    #[target_feature(enable = "neon")]
+    #[inline]
+    unsafe fn store(dst: *mut u8, planes: [uint8x8_t; 1]) {
+        // SAFETY: the caller's contract.
+        unsafe { vst1_u8(dst, planes[0]) };
+    }
+}
+
+impl BlockPlanes<RGB> for RgbPlanes {
+    #[target_feature(enable = "neon")]
+    #[inline]
+    unsafe fn load(src: *const u8) -> [uint8x16_t; RGB] {
+        // SAFETY: the caller's contract.
+        let planes = unsafe { vld3q_u8(src) };
+        [planes.0, planes.1, planes.2]
+    }
+
+    #[target_feature(enable = "neon")]
+    #[inline]
+    unsafe fn store(dst: *mut u8, planes: [uint8x8_t; RGB]) {
+        // SAFETY: the caller's contract.
+        unsafe { vst3_u8(dst, uint8x8x3_t(planes[0], planes[1], planes[2])) };
+    }
+}

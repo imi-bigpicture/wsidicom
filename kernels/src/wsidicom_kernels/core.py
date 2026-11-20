@@ -1,0 +1,198 @@
+#    Copyright 2026 SECTRA AB
+#
+#    Licensed under the Apache License, Version 2.0 (the "License");
+#    you may not use this file except in compliance with the License.
+#    You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
+
+"""Implementation of the wsidicom_kernels public API (see the package docstring)."""
+
+from collections.abc import Sequence
+from typing import Any
+
+from numpy.typing import NDArray
+
+import wsidicom_kernels._kernels as lib
+from wsidicom_kernels.models import ResizeFilter
+
+
+def downscale(
+    image: NDArray[Any],
+    factor: int,
+    resample: ResizeFilter,
+) -> NDArray[Any]:
+    """Reduce ``image`` by integer ``factor`` per spatial axis, antialiased.
+
+    Downscaling must low-pass filter before decimating or high frequencies
+    alias; every filter here does so except ``NEAREST`` (which subsamples and
+    can alias). The kernel support is scaled to the reduction ratio — unlike
+    ``cv2.resize``, where only ``INTER_AREA`` antialiases and
+    ``INTER_LINEAR``/``CUBIC``/``LANCZOS4`` are fixed-kernel interpolators
+    that alias when minifying. A power-of-2 ``factor`` with ``BOX`` uses
+    native SIMD box kernels; other filters and factors resample natively for
+    uint8 and uint16 (within 1 LSB of the exact convolution at any factor;
+    identical on every CPU; uint8 ``BILINEAR`` and ``CATMULLROM`` at
+    ``factor`` 2 and ``BILINEAR`` at ``factor`` 4 exact where the factor
+    divides the size). ``NEAREST`` is
+    native too. ``BOX`` is fastest and mipmap-standard; ``LANCZOS3`` is
+    sharpest, and the windowed filters (``CATMULLROM``/``LANCZOS3``) also
+    suppress the low-frequency beat that pure area averaging leaves on
+    strongly periodic content (gratings, halftones).
+
+    The scale is exactly ``factor``, and output dimensions are
+    ``ceil(dim / factor)``, as Pillow's ``reduce`` and libvips' ``shrink``:
+    where the factor doesn't divide the size, the last row and column cover
+    what remains of the image (with ``BOX``, the mean of the pixels there),
+    rather than the image being stretched to whole blocks or cropped.
+
+    Images are planar ``(H, W)`` or interleaved HWC ``(H, W, C)`` with 1 or 3
+    channels, each filtered independently. For subsampled chroma, downscale
+    each plane separately.
+
+    Parameters
+    ----------
+    image: np.ndarray
+        The source, C-contiguous, dtype uint8 / uint16. Planar
+        ``(H, W)`` or interleaved HWC ``(H, W, C)``, C = 1 or 3.
+    factor: int
+        Integer reduction factor applied to both spatial axes.
+    resample: ResizeFilter
+        Antialiasing filter.
+
+    Returns
+    -------
+    np.ndarray
+        A new, reduced array with the same dtype and channel count as ``image``.
+    """
+    return lib.downscale(image, factor, resample)
+
+
+def downscale_grid(
+    tiles: Sequence[NDArray[Any]],
+    grid_width: int,
+    factor: int,
+    resample: ResizeFilter,
+    size: tuple[int, int] | None = None,
+    fill: NDArray[Any] | None = None,
+) -> NDArray[Any]:
+    """Reduce a grid of tiles to one image: ``downscale`` of the stitched grid.
+
+    The step that builds a pyramid level from the one below: e.g. the four
+    children of a tile, ``[top_left, top_right, bottom_left, bottom_right]``
+    with ``grid_width=2``, reduced by 2 into their parent. The result equals
+    ``downscale`` of the tiles stitched row-major, without building the
+    stitched image: with ``BOX`` and a power-of-2 ``factor``, when every tile
+    but those of the last grid row and column divides by ``factor`` (the box
+    windows then never cross a seam), each tile is reduced on its own straight
+    into its place in the output. Other filters, whose windows reach across
+    the seams, stitch first.
+
+    Parameters
+    ----------
+    tiles: Sequence[np.ndarray]
+        Row-major C-contiguous tiles, ``grid_width`` per grid row, all of one
+        dtype and channel count; the tiles of a grid row share their height
+        and those of a grid column their width (so edge tiles may be smaller).
+    grid_width: int
+        Tiles per grid row; ``len(tiles)`` must be a multiple of it.
+    factor: int
+        Integer reduction factor applied to both spatial axes.
+    resample: ResizeFilter
+        Antialiasing filter.
+    size: tuple[int, int] | None = None
+        If set, the ``(height, width)`` of the result, at least the reduced
+        grid's: the reduced grid at its top left, ``fill`` around it. A parent
+        tile from a partial block at the image's edge then keeps the full tile
+        size.
+    fill: np.ndarray | None = None
+        The pixel around the reduced grid, required with ``size``: a ``(C,)``
+        array in the tiles' dtype, one sample per channel.
+
+    Returns
+    -------
+    np.ndarray
+        The reduced grid, ``ceil(sum of tile heights / factor)`` by
+        ``ceil(sum of tile widths / factor)`` (or ``size``), with the tiles'
+        dtype and channels.
+    """
+    tile_list = list(tiles)
+    if not tile_list or grid_width < 1 or len(tile_list) % grid_width:
+        raise ValueError("Tiles must fill whole grid rows of grid_width tiles.")
+    if (size is None) != (fill is None):
+        raise ValueError("Size and fill go together.")
+    if factor < 1:
+        raise ValueError("Factor must be >= 1.")
+    last_col = grid_width - 1
+    inner_rows = tile_list[: len(tile_list) - grid_width]
+    inner_cols = [
+        tile for index, tile in enumerate(tile_list) if index % grid_width != last_col
+    ]
+    seams_divide = all(tile.shape[0] % factor == 0 for tile in inner_rows) and all(
+        tile.shape[1] % factor == 0 for tile in inner_cols
+    )
+    power_of_two = factor > 0 and factor & (factor - 1) == 0
+    if resample == ResizeFilter.BOX and power_of_two and seams_divide:
+        return lib.downscale_grid_box(tile_list, grid_width, factor, size, fill)
+    stitched = lib.stitch_grid(tile_list, grid_width)
+    reduced = downscale(stitched, factor, resample)
+    if size is None or fill is None:
+        return reduced
+    return lib.framed(reduced, size, fill)
+
+
+def resize(
+    image: NDArray[Any],
+    height: int,
+    width: int,
+    resample: ResizeFilter,
+) -> NDArray[Any]:
+    """Resample ``image`` to an exact ``(height, width)`` — any ratio, antialiased.
+
+    Unlike :func:`downscale`, the ratio is not restricted to an integer factor:
+    any target size works, including fractional reductions (e.g. resampling to a
+    requested resolution) and upscaling. The filter kernel is scaled to
+    the reduction ratio, so every filter here antialiases at every ratio — there
+    is no aliasing fast path to fall into.
+
+    An exact power-of-2 reduction with ``BOX`` (same factor on both axes) takes
+    the same native SIMD kernels as :func:`downscale`; other resizes resample
+    natively for uint8 and uint16 (within 1 LSB of the exact convolution at
+    any ratio; identical on every CPU;
+    uint8 ``BILINEAR`` and ``CATMULLROM`` to exactly half the size and
+    ``BILINEAR`` to exactly a quarter or twice the size exact). ``NEAREST``
+    is native too.
+
+    ``BOX`` is the cheapest antialiased choice and the right default for
+    downscaling; for *upscaling* it degenerates to blocky nearest-like output, so
+    pass ``BILINEAR`` / ``CATMULLROM`` / ``LANCZOS3`` when enlarging.
+
+    Images are planar ``(H, W)`` or interleaved HWC ``(H, W, C)`` with 1 or 3
+    channels, each filtered independently. For subsampled chroma, resize
+    each plane separately.
+
+    Parameters
+    ----------
+    image: np.ndarray
+        The source, C-contiguous, dtype uint8 / uint16. Planar
+        ``(H, W)`` or interleaved HWC ``(H, W, C)``, C = 1 or 3.
+    height: int
+        Target height in pixels.
+    width: int
+        Target width in pixels.
+    resample: ResizeFilter
+        Resampling filter.
+
+    Returns
+    -------
+    np.ndarray
+        A new ``(height, width)`` (or ``(height, width, C)``) array, same dtype
+        and channel count as ``image``.
+    """
+    return lib.resize(image, height, width, resample)

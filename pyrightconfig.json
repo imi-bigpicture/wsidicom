@@ -1,9 +1,17 @@
 {
-  "include": ["wsidicom", "tests"],
+  "include": [
+    "wsidicom",
+    "tests",
+    "kernels/src",
+    "kernels/tests"
+  ],
   "venvPath": ".",
   "venv": ".venv",
   "pythonVersion": "3.11",
   "reportMissingImports": "error",
   "reportUnusedImport": "warning",
-  "reportUnnecessaryTypeIgnoreComment": "error"
+  "reportUnnecessaryTypeIgnoreComment": "error",
+  "strict": [
+    "kernels/src"
+  ]
 }

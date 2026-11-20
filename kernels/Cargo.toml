@@ -1,0 +1,65 @@
+[package]
+name = "wsidicom-kernels"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[lib]
+name = "_kernels"
+crate-type = ["cdylib"]
+
+[dependencies]
+# abi3-py311: one stable-ABI wheel for every CPython from 3.11, the package's
+# requires-python.
+# extension-module comes from maturin (pyproject.toml), so `cargo test`
+# links an ordinary test binary.
+pyo3 = { version = "0.29", features = ["abi3-py311"] }
+numpy = "0.29"          # rust-numpy: Rust bindings for numpy arrays (NOT the Python pkg)
+bytemuck = "1"
+
+[lints.clippy]
+# Every unsafe block states why it is sound.
+undocumented_unsafe_blocks = "warn"
+# Pedantic lints are taken one at a time: the whole group mostly flags the
+# deliberate casts of the SIMD code.
+doc_markdown = "warn"
+# Widening casts as From, so the remaining `as` casts are the lossy ones.
+cast_lossless = "warn"
+semicolon_if_nothing_returned = "warn"
+items_after_statements = "warn"
+single_match_else = "warn"
+verbose_bit_mask = "warn"
+manual_let_else = "warn"
+ignored_unit_patterns = "warn"
+if_not_else = "warn"
+match_bool = "warn"
+bool_to_int_with_if = "warn"
+# Names read as words; the allowed single letters are in clippy.toml.
+min_ident_chars = "warn"
+# Lint exceptions are #[expect] with a reason, so they say why and fail when
+# no longer needed.
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+# A panic reaches Python as an opaque PanicException: none without a stated
+# invariant (unreachable! arms state theirs in the message).
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+
+# No global target-cpu: the crate builds for baseline x86-64, so one binary
+# runs on any x86-64 CPU. Each SIMD kernel enables its own target features
+# and runs only after a runtime feature check.
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+
+# The allocator outputs come from (see lib.rs). x86-64 only: on aarch64 macOS
+# the system allocator recycles the outputs as well (measured, no gain).
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+mimalloc = { version = "0.1", default-features = false }
