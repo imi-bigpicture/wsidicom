@@ -34,7 +34,7 @@ jobs:
           - macos-15-intel
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@v10.3.3
       - name: Build and test wheels
         run: uvx cibuildwheel==4.3.0 kernels --output-dir wheelhouse
       - uses: actions/upload-artifact@v7
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@v10.3.3
       - run: uv build --sdist kernels --out-dir dist
       - uses: actions/upload-artifact@v7
         with:
@@ -87,5 +87,5 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@v10.3.3
       - run: uv publish dist/*  # trusted publishing; no token needed in CI
