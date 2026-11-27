@@ -72,6 +72,7 @@ class TestWsiFilesIntegration:
         for path, created_file in created_files.items():
             dataset = dcmread(str(path), stop_before_pixels=True)
             assert created_file.uids.instance == dataset.SOPInstanceUID
+            assert created_file.instance_number == dataset.InstanceNumber
             assert created_file.uids.slide.series_instance == dataset.SeriesInstanceUID
             assert created_file.image_type.value == dataset.ImageType[2]
             assert created_file.image_size.width == dataset.TotalPixelMatrixColumns
@@ -95,6 +96,27 @@ class TestWsiFilesIntegration:
                 assert created_file.pixel_spacing.height == float(
                     pixel_measures.PixelSpacing[0]
                 )
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names())
+    def test_created_files_are_numbered_consecutively_from_one(
+        self,
+        wsi_name: str,
+        wsi_factory: Callable[[str], WsiDicom],
+        tmp_path: Path,
+    ) -> None:
+        # Arrange
+        wsi = wsi_factory(wsi_name)
+
+        # Act
+        created_files = wsi.save(tmp_path)
+
+        # Assert
+        instance_numbers = sorted(
+            created_file.instance_number
+            for created_file in created_files.values()
+            if created_file.instance_number is not None
+        )
+        assert instance_numbers == list(range(1, len(created_files) + 1))
 
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names())
     def test_level_files_give_pyramid_and_level_index(

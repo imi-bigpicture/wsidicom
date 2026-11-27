@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `WsiFile.instance_number`, the InstanceNumber of the file, or None if the file has none. Files created in one save are numbered consecutively from 1, so the next free number is the highest one plus one.
+
 ## [0.37.0] - 2026-11-20
 
 ### Added

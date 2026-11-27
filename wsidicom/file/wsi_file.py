@@ -38,6 +38,9 @@ class WsiFileBase:
         The SOP Instance UID of the file, the SOP Instance UID of the
         concatenation source if the file is part of a concatenation, and the
         study, series and frame of reference UIDs.
+    instance_number: int | None
+        The InstanceNumber of the file, or None if the file has none. Files
+        created in one save are numbered consecutively from 1.
     image_size: Size
         Size of the total pixel matrix in pixels.
     tile_size: Size
@@ -59,6 +62,7 @@ class WsiFileBase:
 
     image_type: ImageType
     uids: FileUids
+    instance_number: int | None
     image_size: Size
     tile_size: Size
     pixel_spacing: SizeMm | None
@@ -171,6 +175,7 @@ class WsiLevelFile(WsiFileBase):
         return cls(
             image_type=ImageType.VOLUME,
             uids=dataset.uids,
+            instance_number=dataset.instance_number,
             image_size=dataset.image_size,
             tile_size=dataset.tile_size,
             pixel_spacing=cls._require_pixel_spacing(dataset),
@@ -241,6 +246,7 @@ class WsiThumbnailFile(WsiFileBase):
         return cls(
             image_type=ImageType.THUMBNAIL,
             uids=dataset.uids,
+            instance_number=dataset.instance_number,
             image_size=dataset.image_size,
             tile_size=dataset.tile_size,
             pixel_spacing=cls._require_pixel_spacing(dataset),
@@ -294,6 +300,7 @@ class WsiAssociatedFile(WsiFileBase):
         return cls(
             image_type=image_type,
             uids=dataset.uids,
+            instance_number=dataset.instance_number,
             image_size=dataset.image_size,
             tile_size=dataset.tile_size,
             pixel_spacing=cls._pixel_spacing(dataset),
