@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The default focal plane is the one closest to the middle of the z range, also when the lowest focal plane is not at 0.
+
 ## [0.37.0] - 2026-11-20
 
 ### Added

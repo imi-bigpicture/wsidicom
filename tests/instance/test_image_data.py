@@ -101,6 +101,7 @@ class TestImageDataDefaultZ:
         [
             ([5.0], 5.0),
             ([0.0, 1.0, 2.0], 1.0),
+            ([0.0, 1.0, 2.0, 3.0], 1.0),
             ([-2.0, -1.0, 0.0, 1.0, 2.0], 0.0),
             ([10.0, 20.0, 30.0], 20.0),
             ([-30.0, -20.0, -10.0], -20.0),
@@ -110,6 +111,11 @@ class TestImageDataDefaultZ:
     def test_default_z_returns_middle_focal_plane(
         self, focal_planes: list[float], expected: float
     ) -> None:
+        # Arrange
         image_data = _FocalPlanesImageData(focal_planes)
 
-        assert image_data.default_z == expected
+        # Act
+        default_z = image_data.default_z
+
+        # Assert
+        assert default_z == expected
