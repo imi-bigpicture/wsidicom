@@ -87,10 +87,11 @@ class EncodingResolver:
         Parameters
         ----------
         transcoding: Settings | Encoder | None
-            Settings or encoder for transcoding. Settings are encoded with the
-            encoder created for them. If None, the encoding of each source is
-            kept. If a recoder applies to the settings, the tiles it can recode
-            are recoded rather than copied or transcoded.
+            Settings or encoder for transcoding. Settings are adapted to the
+            pixel format of each source and encoded with the encoder created for
+            them, while an encoder is used as it is. If None, the encoding of
+            each source is kept. If a recoder applies to the settings, the tiles it
+            can recode are recoded rather than copied or transcoded.
         mode: TranscodingMode
             Which sources are transcoded with the transcoder.
 
@@ -101,10 +102,13 @@ class EncodingResolver:
             available.
         """
         if isinstance(transcoding, Settings):
+            self._settings = transcoding
             transcoder = Encoder.create_for_settings(transcoding)
         else:
+            self._settings = None
             transcoder = transcoding
         self._transcoder = transcoder
+        self._adapted_transcoders: dict[tuple[int, int], Encoder] = {}
         self._mode = mode
         self._recoder = (
             Recoder.create_for_settings(transcoder.settings)
@@ -137,17 +141,18 @@ class EncodingResolver:
             If the tiles are transcoded with an encoder whose bits or samples
             per pixel do not match those of the image data.
         """
-        if self._transcoder is not None and self._mode == TranscodingMode.ALWAYS:
+        transcoder = self._transcoder_for(image_data)
+        if transcoder is not None and self._mode == TranscodingMode.ALWAYS:
             # The user wants every tile decoded and encoded again with the transcoder.
-            return self._transcoded(self._transcoder, image_data)
+            return self._transcoded(transcoder, image_data)
         if image_data.transcoder is not None:
             # The image data can only give decoded tiles, so they must be encoded.
             return self._transcoded(
                 # The transcoder of the user, if it asks for another transfer
                 # syntax, and else the own transcoder of the image data.
-                self._transcoder
-                if self._transcoder is not None
-                and image_data.transfer_syntax != self._transcoder.transfer_syntax
+                transcoder
+                if transcoder is not None
+                and image_data.transfer_syntax != transcoder.transfer_syntax
                 else image_data.transcoder,
                 image_data,
             )
@@ -163,15 +168,36 @@ class EncodingResolver:
             )
         if (
             self._mode == TranscodingMode.MATCH
-            and self._transcoder is not None
-            and image_data.transfer_syntax != self._transcoder.transfer_syntax
+            and transcoder is not None
+            and image_data.transfer_syntax != transcoder.transfer_syntax
         ):
             # The tiles are in another transfer syntax than the user asks for.
-            return self._transcoded(self._transcoder, image_data)
+            return self._transcoded(transcoder, image_data)
         # The tiles are already in the transfer syntax asked for, none was asked
         # for, or they are kept in their own.
         encoder = self._generated_tiles_encoder(image_data)
         return CopiedEncoding(encoder, image_data.transfer_syntax)
+
+    def _transcoder_for(self, image_data: ImageData) -> Encoder | None:
+        """Return the transcoder of the user for image data.
+
+        An encoder given by the user is returned as it is. For settings, an
+        encoder is created for the settings adapted to the pixel format of the
+        image data, once for each pixel format.
+        """
+        if self._settings is None or self._transcoder is None:
+            return self._transcoder
+        pixel_format = (image_data.bits, image_data.samples_per_pixel)
+        encoder = self._adapted_transcoders.get(pixel_format)
+        if encoder is None:
+            adapted = self._settings.adapted_to(*pixel_format)
+            encoder = (
+                self._transcoder
+                if adapted is self._settings
+                else Encoder.create_for_settings(adapted)
+            )
+            self._adapted_transcoders[pixel_format] = encoder
+        return encoder
 
     def _transcoded(
         self, transcoder: Encoder, image_data: ImageData
@@ -199,10 +225,9 @@ class EncodingResolver:
         transcoder if it can encode the pixels of the image data, and else with
         the encoder of the image data. Either is matched to the recoder.
         """
-        if self._transcoder is not None and self._can_encode(
-            self._transcoder, image_data
-        ):
-            return self._matching_encoder(self._transcoder)
+        transcoder = self._transcoder_for(image_data)
+        if transcoder is not None and self._can_encode(transcoder, image_data):
+            return self._matching_encoder(transcoder)
         return self._matching_encoder(image_data.encoder)
 
     @staticmethod

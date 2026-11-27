@@ -7,7 +7,7 @@ exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for 
 exclude-newer-span = "P14D"
 
 [options.exclude-newer-package]
-imagecodecs = false
+wsidicom-data = false
 
 [manifest]
 members = [
@@ -1194,7 +1194,7 @@ requires-dist = [
     { name = "marshmallow", specifier = ">=4.0.0" },
     { name = "numpy", specifier = ">=1.22.0" },
     { name = "opencv-python-headless", marker = "extra == 'opencv'", specifier = ">=4.5.0" },
-    { name = "pillow", specifier = ">=9.1.1" },
+    { name = "pillow", specifier = ">=10.2.0" },
     { name = "pydicom", specifier = ">=3.0.0" },
     { name = "pyjpegls", marker = "extra == 'pyjpegls'", specifier = ">=1.2.0,<2.0.0" },
     { name = "pylibjpeg-openjpeg", marker = "extra == 'pylibjpeg-openjpeg'", specifier = ">=2.1.1,<3.0.0" },
@@ -1214,20 +1214,20 @@ dev = [
     { name = "ruff", specifier = ">=0.16.3" },
     { name = "shapely", specifier = ">=2.0.2,<3.0.0" },
     { name = "typos", specifier = ">=1.48.0" },
-    { name = "wsidicom-data", specifier = ">=0.3.0,<0.4.0" },
+    { name = "wsidicom-data", specifier = ">=0.4.0,<0.5.0" },
     { name = "xmltodict", specifier = ">=0.12.0,<1.1.0" },
 ]
 
 [[package]]
 name = "wsidicom-data"
-version = "0.3.0"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "wsidicom" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1e/ba/fc16111bf55a58137a622fe72f684968d1249480915079f4949ef7b2e59a/wsidicom_data-0.3.0.tar.gz", hash = "sha256:1db5998f79f272751aeb953c155a07d56714c84a8db999597ec2545303cbc058", size = 2865943, upload-time = "2023-12-06T15:29:28.466Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8d/e5/acbbecf9ae9a5e3c21a87c80c7da6f8c06c890066c4ef7238bfc0ae418f4/wsidicom_data-0.4.0.tar.gz", hash = "sha256:9830722b234a6b74b87f1eb09a1bb949acfb9399bf8860ade78d8ba75c733d33", size = 3054618, upload-time = "2026-11-27T15:19:57.799Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3e/24/3b9c565ba2d3f6f4edbf0248fe6dd0a880a95e4f0a11c3e5eefc70a575d3/wsidicom_data-0.3.0-py3-none-any.whl", hash = "sha256:8edb944c46127203e8837b89fc9a20898f39f48202e15131e961a80d1034cb38", size = 2864469, upload-time = "2023-12-06T15:29:21.27Z" },
+    { url = "https://files.pythonhosted.org/packages/ce/cb/5f1ad94d231e18e9c0fc44803cdf928abe8fbc49127ad9e94a1eab166099/wsidicom_data-0.4.0-py3-none-any.whl", hash = "sha256:107d64741dcb9d93dcec5098858f42ee54dd66aa055e946ba304327fc74883e9", size = 2983982, upload-time = "2026-11-27T15:19:56.314Z" },
 ]
 
 [[package]]

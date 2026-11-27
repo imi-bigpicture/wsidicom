@@ -48,7 +48,8 @@ Please note that this is an early release and the API is not frozen yet. Functio
 - Only the photometric interpretations enumerated by the DICOM WSI IOD
   ([PS3.3 C.8.12.4](https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_c.8.12.4.html))
   are supported: `MONOCHROME2`, `RGB`, and the `YBR_*` variants. `MONOCHROME1`
-  is not part of that IOD and is not supported.
+  is not part of that IOD and is not supported. RLE Lossless must be
+  `MONOCHROME2` or `RGB`, as the decoded samples are not color converted.
 
 - Without optional dependencies, the following transfer syntaxes are supported:
 

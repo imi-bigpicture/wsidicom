@@ -20,7 +20,7 @@ classifiers = [
 dependencies = [
     "numpy>=1.22.0",
     "pydicom>=3.0.0",
-    "Pillow>=9.1.1",
+    "Pillow>=10.2.0",
     "dicomweb-client>=0.61.0",
     "marshmallow>=4.0.0",
     "fsspec>=2024.2.0",
@@ -45,7 +45,7 @@ dev = [
     "shapely>=2.0.2,<3.0.0",
     "ruff>=0.16.3",
     "pyright>=1.1.409",
-    "wsidicom-data>=0.3.0,<0.4.0",
+    "wsidicom-data>=0.4.0,<0.5.0",
     "decoy>=2.2.0,<3.0.0",
     "pytest-testmon>=2.2.0",
     "pytest-watcher>=0.6.3",
@@ -57,8 +57,8 @@ Repository = "https://github.com/imi-bigpicture/wsidicom"
 
 [tool.uv]
 exclude-newer = "14 days"
-# Temporary: imagecodecs 2026.11.11 is inside the 14-day window. Remove after 2026-11-26.
-exclude-newer-package = { imagecodecs = false }
+# wsidicom-data holds the test data of this project, and is always trusted.
+exclude-newer-package = { wsidicom-data = false }
 
 [tool.uv.workspace]
 members = ["kernels"]

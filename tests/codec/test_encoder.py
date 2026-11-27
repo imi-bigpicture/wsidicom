@@ -84,12 +84,11 @@ ENCODER_CASES = [
     (JpegEncoder, JpegSettings(95, 12, Channels.GRAYSCALE), 2),
     (PillowEncoder, JpegSettings(95, 8, Channels.GRAYSCALE), 2),
     (PillowEncoder, JpegSettings(95, 8, Channels.YBR, Subsampling.R444), 2),
+    (PillowEncoder, JpegSettings(95, 8, Channels.RGB), 2),
     (JpegEncoder, JpegLosslessSettings(7, 8, Channels.GRAYSCALE), 0),
-    (JpegEncoder, JpegLosslessSettings(7, 8, Channels.YBR), 0),
     (JpegEncoder, JpegLosslessSettings(7, 8, Channels.RGB), 0),
     (JpegEncoder, JpegLosslessSettings(7, 16, Channels.GRAYSCALE), 0),
     (JpegEncoder, JpegLosslessSettings(1, 8, Channels.GRAYSCALE), 0),
-    (JpegEncoder, JpegLosslessSettings(1, 8, Channels.YBR), 0),
     (JpegEncoder, JpegLosslessSettings(1, 8, Channels.RGB), 0),
     (JpegEncoder, JpegLosslessSettings(1, 16, Channels.GRAYSCALE), 0),
     (JpegLsEncoder, JpegLsSettings(0, 8, Channels.GRAYSCALE), 0),
@@ -143,6 +142,30 @@ ENCODER_CASES = [
     (NumpyEncoder, NumpySettings(8, Channels.RGB, False, True), 0),
 ]
 """Encoders with settings, and the RMS difference allowed after a round trip."""
+
+
+@pytest.mark.unittest
+class TestJpegRgbSubsampling:
+    @pytest.mark.parametrize("subsampling", list(Subsampling))
+    @pytest.mark.parametrize("encoder_type", [JpegEncoder, PillowEncoder])
+    def test_encode_ignores_subsampling(
+        self, encoder_type: type[Encoder], subsampling: Subsampling
+    ) -> None:
+        # Arrange
+        if not encoder_type.is_available():
+            pytest.skip("Encoder not available")
+        image = np.random.default_rng(0).integers(0, 255, (64, 64, 3), np.uint8)
+        full = JpegSettings(channels=Channels.RGB, subsampling=Subsampling.R444)
+        settings = JpegSettings(channels=Channels.RGB, subsampling=subsampling)
+        expected = encoder_type(full).encode(image)
+
+        # Act
+        supported = encoder_type.supports_settings(settings)
+        encoded = encoder_type(settings).encode(image)
+
+        # Assert
+        assert supported
+        assert encoded == expected
 
 
 @pytest.mark.unittest

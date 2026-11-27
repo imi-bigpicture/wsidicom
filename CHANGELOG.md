@@ -10,10 +10,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `WsiFile.instance_number`, the InstanceNumber of the file, or None if the file has none. Files created in one save are numbered consecutively from 1, so the next free number is the highest one plus one.
+- `Settings.adapted_to()`, giving encoder settings where the bits and channels not specified at creation follow the given bits and samples per pixel.
+
+### Changed
+
+- `bits` and `channels` of the encoder settings default to None, meaning not given. The properties still report 8 bits and the color channels of the format for them.
+- Settings given as `transcoding` when saving are adapted to the pixel format of each image, so that for instance `Jpeg2kSettings()` encodes a 16-bit grayscale image as such, where it previously raised `ValueError`. An `Encoder` is used as it is.
+- `JpegLosslessSettings` raises `ValueError` on creation for a predictor other than 1-7, including None, which previously gave JPEG Lossless SV1 (1.2.840.10008.1.2.4.70). Use 1 instead.
+- `Settings.create()` for JPEG Lossless (1.2.840.10008.1.2.4.57) uses predictor 4, as predictor 1 gives SV1.
+- `JpegLosslessSettings` and `JpegXlSettings` default to `Channels.RGB`. `Settings.create()` gives RGB for a lossless JPEG or JPEG XL image stated as `YBR_FULL`.
+- `JpegLosslessSettings`, `JpegLsSettings`, `JpegXlSettings`, `NumpySettings` and `RleSettings` raise `ValueError` for `Channels.YBR`, as they can not store the samples as YBR.
+- RLE images stated as `YBR_FULL` are not opened, as decoded samples are not color converted. This includes images written with `RleSettings(channels=Channels.YBR)`.
+- Encoder settings raise `ValueError` for bits their format does not support, where it previously failed when encoding, or not at all. `bits` of `JpegSettings` is typed as 8 or 12, and of `NumpySettings` and `RleSettings` as 8 or 16.
+- Pillow 10.2 or later is required, for the `keep_rgb` option that stores the samples of a JPEG as RGB.
 
 ### Fixed
 
 - The default focal plane is the one closest to the middle of the z range, also when the lowest focal plane is not at 0.
+- Color images encoded with lossless JPEG were stated as `YBR_FULL` unless `Channels.RGB` was given, though their samples are stored as RGB.
+- Color images encoded with JPEG XL were stated as `YBR_FULL` unless `Channels.RGB` was given. They are now stated as RGB, the color space of the samples for lossless JPEG XL. Lossy JPEG XL stores the samples as XYB, which the codestream states, and is also stated as RGB as XYB is not a photometric interpretation of whole slide images.
+- `PillowEncoder`, used when imagecodecs is not installed, stored JPEG with `Channels.RGB` as YBR while stating RGB, so that the colors were wrong when read. The samples are now stored as RGB, and the chroma subsampling is ignored, as it is with imagecodecs.
+- RLE encoded with `Channels.YBR` was stated as `YBR_FULL` though the samples were stored as given, normally RGB.
+- RLE and uncompressed images with 9-15 bits are no longer opened. Uncompressed ones were cut to 8 bits when read, and when levels were added to them.
+- `JpegLosslessSettings` with predictor 1, the default, gave JPEG Lossless instead of SV1. So did `Settings.create()` for SV1, so that levels added to an SV1 image were written as JPEG Lossless.
 
 ## [0.37.0] - 2026-11-20
 
