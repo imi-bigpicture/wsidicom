@@ -38,6 +38,7 @@ def shared_fields() -> dict[str, Any]:
             None,
             SlideUids(generate_uid(), generate_uid(), generate_uid()),
         ),
+        "instance_number": 1,
         "image_size": Size(1024, 512),
         "tile_size": Size(256, 256),
         "focal_planes": (0.0,),

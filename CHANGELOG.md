@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `WsiFile.instance_number`, the InstanceNumber of the file, or None if the file has none. Files created in one save are numbered consecutively from 1, so the next free number is the highest one plus one.
+
 ### Fixed
 
 - The default focal plane is the one closest to the middle of the z range, also when the lowest focal plane is not at 0.

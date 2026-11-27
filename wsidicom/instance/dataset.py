@@ -839,6 +839,16 @@ class WsiDataset:
         """
         return UID(self._dataset.SOPInstanceUID)
 
+    @property
+    def instance_number(self) -> int | None:
+        """The instance number of this instance, or None if it has none.
+
+        Instance Number is not guaranteed to be present or filled in a file
+        read from disk.
+        """
+        value = self._dataset.get("InstanceNumber")
+        return None if value is None or value == "" else int(value)
+
     @cached_property
     def uids(self) -> FileUids:
         """Return UIDs from dataset.
