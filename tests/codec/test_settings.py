@@ -12,10 +12,11 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Tests of adapting encoder settings to the pixel format of an image."""
+"""Tests of encoder settings."""
 
 import numpy as np
 import pytest
+from pydicom.uid import UID, JPEGLossless, JPEGLosslessSV1
 
 from wsidicom.codec import Channels, Decoder, Encoder
 from wsidicom.codec.settings import (
@@ -232,3 +233,52 @@ class TestSettingsAdaptedTo:
         assert decoded.shape[:2] == pixels.shape
         error = np.abs(decoded.astype(int) - pixels.astype(int)).max()
         assert error <= (2**bits) * 0.02
+
+
+@pytest.mark.unittest
+class TestJpegLosslessSettings:
+    @pytest.mark.parametrize(
+        ["predictor", "expected_transfer_syntax"],
+        [
+            (1, JPEGLosslessSV1),
+            *((predictor, JPEGLossless) for predictor in range(2, 8)),
+        ],
+    )
+    def test_predictor_gives_transfer_syntax(
+        self, predictor: int, expected_transfer_syntax: UID
+    ) -> None:
+        # Arrange
+
+        # Act
+        settings = JpegLosslessSettings(predictor)
+
+        # Assert
+        assert settings.transfer_syntax == expected_transfer_syntax
+
+    def test_default_gives_sv1(self) -> None:
+        # Arrange
+
+        # Act
+        settings = JpegLosslessSettings()
+
+        # Assert
+        assert settings.predictor == 1
+        assert settings.transfer_syntax == JPEGLosslessSV1
+
+    @pytest.mark.parametrize("predictor", [0, 8, None])
+    def test_unsupported_predictor_raises(self, predictor: int | None) -> None:
+        # Arrange
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="Unsupported predictor"):
+            JpegLosslessSettings(predictor)  # pyright: ignore[reportArgumentType]
+
+    @pytest.mark.parametrize("transfer_syntax", [JPEGLossless, JPEGLosslessSV1])
+    def test_created_settings_keep_transfer_syntax(self, transfer_syntax: UID) -> None:
+        # Arrange
+
+        # Act
+        settings = Settings.create(transfer_syntax, 8, "RGB")
+
+        # Assert
+        assert settings.transfer_syntax == transfer_syntax

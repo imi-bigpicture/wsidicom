@@ -264,7 +264,10 @@ class Settings(metaclass=ABCMeta):
         if transfer_syntax in jpeg_transfer_syntaxes:
             return JpegSettings(bits=bits, channels=channels)
         if transfer_syntax in jpeg_lossless_transfer_syntaxes:
-            return JpegLosslessSettings(bits=bits, channels=channels)
+            # Predictor 1 gives SV1. Any other gives the general transfer syntax,
+            # where 4 compresses tissue well.
+            predictor = 1 if transfer_syntax == JPEGLosslessSV1 else 4
+            return JpegLosslessSettings(predictor, bits=bits, channels=channels)
         if transfer_syntax in jpeg_ls_transfer_syntaxes:
             if channels == Channels.YBR:
                 raise ValueError("JPEG-LS does not support conversion to ybr.")
@@ -405,12 +408,15 @@ class JpegLosslessSettings(Settings):
         Parameters
         ----------
             predictor: int = 1
-                JPEG predictor setting. 1-7. Use 1 for SV1.
+                JPEG predictor (selection value), 1-7. 1 gives the transfer syntax
+                JPEG Lossless SV1, and 2-7 give JPEG Lossless.
             bits: int | None = None
                 Number of bits per pixel, see `Settings`.
             channels: Channels | None = None
                 Color channels in encoded image, see `Settings`.
         """
+        if predictor not in range(1, 8):
+            raise ValueError(f"Unsupported predictor: {predictor}. Use 1-7.")
         self._predictor = predictor
         super().__init__(bits, channels)
 
@@ -427,7 +433,7 @@ class JpegLosslessSettings(Settings):
 
     @property
     def transfer_syntax(self) -> UID:
-        if self.predictor is None:
+        if self.predictor == 1:
             return JPEGLosslessSV1
         return JPEGLossless
 

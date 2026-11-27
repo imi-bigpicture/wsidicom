@@ -16,10 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `bits` and `channels` of the encoder settings default to None, meaning not given. The properties still report 8 bits and the color channels of the format for them.
 - Settings given as `transcoding` when saving are adapted to the pixel format of each image, so that for instance `Jpeg2kSettings()` encodes a 16-bit grayscale image as such, where it previously raised `ValueError`. An `Encoder` is used as it is.
+- `JpegLosslessSettings` raises `ValueError` on creation for a predictor other than 1-7, including None, which previously gave JPEG Lossless SV1 (1.2.840.10008.1.2.4.70). Use 1 instead.
+- `Settings.create()` for JPEG Lossless (1.2.840.10008.1.2.4.57) uses predictor 4, as predictor 1 gives SV1.
 
 ### Fixed
 
 - The default focal plane is the one closest to the middle of the z range, also when the lowest focal plane is not at 0.
+- `JpegLosslessSettings` with predictor 1, the default, gave JPEG Lossless instead of SV1. So did `Settings.create()` for SV1, so that levels added to an SV1 image were written as JPEG Lossless.
 
 ## [0.37.0] - 2026-11-20
 
