@@ -464,7 +464,7 @@ class ImageData(metaclass=ABCMeta):
             if len(self.focal_planes) > 1:
                 smallest = min(self.focal_planes)
                 largest = max(self.focal_planes)
-                middle = (largest - smallest) / 2
+                middle = (largest + smallest) / 2
                 default = min(
                     range(len(self.focal_planes)),
                     key=lambda i: abs(self.focal_planes[i] - middle),
