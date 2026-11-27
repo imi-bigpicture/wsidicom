@@ -102,6 +102,8 @@ class Settings(metaclass=ABCMeta):
     """Bits per sample if not given."""
     _DEFAULT_COLOR_CHANNELS: ClassVar[Channels] = Channels.YBR
     """Channels if not given, and the channels of an adapted color image."""
+    _SUPPORTED_CHANNELS: ClassVar[tuple[Channels, ...]] = tuple(Channels)
+    """Channels that can be given."""
 
     def __init__(
         self, bits: int | None = None, channels: Channels | None = None
@@ -118,7 +120,16 @@ class Settings(metaclass=ABCMeta):
                 Color channels in encoded image. If None, the default color
                 channels of the format, or the channels matching the image the
                 settings are adapted to.
+
+        Raises
+        ------
+        ValueError
+            If the format does not support the channels.
         """
+        if channels is not None and channels not in self._SUPPORTED_CHANNELS:
+            raise ValueError(
+                f"{type(self).__name__} does not support {channels.value} channels."
+            )
         self._given_bits = bits
         self._given_channels = channels
 
@@ -267,13 +278,11 @@ class Settings(metaclass=ABCMeta):
             # Predictor 1 gives SV1. Any other gives the general transfer syntax,
             # where 4 compresses tissue well.
             predictor = 1 if transfer_syntax == JPEGLosslessSV1 else 4
-            return JpegLosslessSettings(predictor, bits=bits, channels=channels)
-        if transfer_syntax in jpeg_ls_transfer_syntaxes:
+            # There is no color transform in lossless jpeg, so color images are
+            # encoded as RGB also if stated as something else.
             if channels == Channels.YBR:
-                raise ValueError("JPEG-LS does not support conversion to ybr.")
-            if transfer_syntax == JPEGLSNearLossless:
-                return JpegLsSettings(level=1, bits=bits, channels=channels)
-            return JpegLsSettings(level=0, bits=bits, channels=channels)
+                channels = Channels.RGB
+            return JpegLosslessSettings(predictor, bits=bits, channels=channels)
         if transfer_syntax in jpeg_2000_transfer_syntaxes:
             if transfer_syntax == JPEG2000:
                 return Jpeg2kSettings(bits=bits, channels=channels)
@@ -283,14 +292,25 @@ class Settings(metaclass=ABCMeta):
                 return HTJpeg2000Settings(bits=bits, channels=channels)
             return HTJpeg2000Settings(levels=0, bits=bits, channels=channels)
         if transfer_syntax in jpeg_xl_transfer_syntaxes:
+            # The color space of the decoded pixels is given by the codestream,
+            # and color images are stated as RGB when encoded.
+            if channels == Channels.YBR:
+                channels = Channels.RGB
             if transfer_syntax == JPEGXL:
                 return JpegXlSettings(level=None, bits=bits, channels=channels)
             return JpegXlSettings(level=100, bits=bits, channels=channels)
+        # The remaining formats can not store the samples as ybr.
+        if channels == Channels.YBR:
+            raise ValueError(
+                f"Unsupported transfer syntax for ybr channels: {transfer_syntax}."
+            )
+        if transfer_syntax in jpeg_ls_transfer_syntaxes:
+            if transfer_syntax == JPEGLSNearLossless:
+                return JpegLsSettings(level=1, bits=bits, channels=channels)
+            return JpegLsSettings(level=0, bits=bits, channels=channels)
         if transfer_syntax == RLELossless:
             return RleSettings(bits=bits, channels=channels)
         if transfer_syntax in uncompressed_transfer_syntaxes:
-            if channels == Channels.YBR:
-                raise ValueError("Numpy encoder does not support ybr images.")
             return NumpySettings(
                 bits=bits,
                 channels=channels,
@@ -322,8 +342,9 @@ class JpegSettings(Settings):
                 Number of bits per pixel, see `Settings`.
             channels: Channels | None = None
                 Color channels in encoded image, see `Settings`.
-            subsampling: Subsampling = Subsampling.R420
-                Chroma subsampling settings.
+            subsampling: Subsampling = Subsampling.R422
+                Chroma subsampling settings. Ignored for RGB, which has no chroma
+                components.
             optimize: bool = False
                 If to build Huffman tables optimal for each encoded image instead of
                 using the default tables. This makes the encoded images smaller
@@ -396,11 +417,20 @@ class JpegSettings(Settings):
 
 
 class JpegLosslessSettings(Settings):
+    """JPEG lossless encoding settings.
+
+    Color images are encoded as RGB, as there is no color transform in lossless
+    JPEG. `Channels.YBR` is not supported.
+    """
+
+    _DEFAULT_COLOR_CHANNELS = Channels.RGB
+    _SUPPORTED_CHANNELS = (Channels.GRAYSCALE, Channels.RGB)
+
     def __init__(
         self,
         predictor: int = 1,
         bits: int | None = None,
-        channels: Channels | None = None,
+        channels: Literal[Channels.GRAYSCALE, Channels.RGB] | None = None,
     ) -> None:
         """
         Initialize JPEG lossless encoding settings.
@@ -412,7 +442,7 @@ class JpegLosslessSettings(Settings):
                 JPEG Lossless SV1, and 2-7 give JPEG Lossless.
             bits: int | None = None
                 Number of bits per pixel, see `Settings`.
-            channels: Channels | None = None
+            channels: Literal[Channels.GRAYSCALE, Channels.RGB] | None = None
                 Color channels in encoded image, see `Settings`.
         """
         if predictor not in range(1, 8):
@@ -441,8 +471,6 @@ class JpegLosslessSettings(Settings):
     def photometric_interpretation(self) -> str:
         if self.channels == Channels.GRAYSCALE:
             return "MONOCHROME2"
-        if self.channels == Channels.YBR:
-            return "YBR_FULL"
         return "RGB"
 
     @property
@@ -452,12 +480,13 @@ class JpegLosslessSettings(Settings):
 
 class JpegLsSettings(Settings):
     _DEFAULT_COLOR_CHANNELS = Channels.RGB
+    _SUPPORTED_CHANNELS = (Channels.GRAYSCALE, Channels.RGB)
 
     def __init__(
         self,
         level: int = 0,
         bits: int | None = None,
-        channels: Channels | None = None,
+        channels: Literal[Channels.GRAYSCALE, Channels.RGB] | None = None,
     ) -> None:
         """
         Initialize JPEG-LS lossless encoding settings. Only supports grayscale images.
@@ -468,7 +497,7 @@ class JpegLsSettings(Settings):
                 JPEG-LS near-lossless level. 0-9. 0 is lossless.
             bits: int | None = None
                 Number of bits per pixel, see `Settings`.
-            channels: Channels | None = None
+            channels: Literal[Channels.GRAYSCALE, Channels.RGB] | None = None
                 Color channels in encoded image, see `Settings`.
         """
         self._level = level
@@ -573,11 +602,21 @@ class HTJpeg2000Settings(Jpeg2kSettings):
 
 
 class JpegXlSettings(Settings):
+    """JPEG XL encoding settings.
+
+    Color images are stated as RGB. Lossless JPEG XL stores the RGB samples, while
+    lossy stores them in the XYB color space, which the codestream states, so that
+    they are decoded as RGB. `Channels.YBR` is not supported.
+    """
+
+    _DEFAULT_COLOR_CHANNELS = Channels.RGB
+    _SUPPORTED_CHANNELS = (Channels.GRAYSCALE, Channels.RGB)
+
     def __init__(
         self,
         level: int | None = None,
         bits: int | None = None,
-        channels: Channels | None = None,
+        channels: Literal[Channels.GRAYSCALE, Channels.RGB] | None = None,
     ) -> None:
         """
         Initialize JPEG XL encoding settings.
@@ -588,7 +627,7 @@ class JpegXlSettings(Settings):
                 JPEG XL compression level. -100-100. Set to 100 for lossless.
             bits: int | None = None
                 Number of bits per pixel, see `Settings`.
-            channels: Channels | None = None
+            channels: Literal[Channels.GRAYSCALE, Channels.RGB] | None = None
                 Color channels in encoded image, see `Settings`.
         """
         self._level = level
@@ -615,8 +654,6 @@ class JpegXlSettings(Settings):
     def photometric_interpretation(self) -> str:
         if self.channels == Channels.GRAYSCALE:
             return "MONOCHROME2"
-        if self.channels == Channels.YBR:
-            return "YBR_FULL"
         return "RGB"
 
     @property
@@ -626,6 +663,7 @@ class JpegXlSettings(Settings):
 
 class NumpySettings(Settings):
     _DEFAULT_COLOR_CHANNELS = Channels.RGB
+    _SUPPORTED_CHANNELS = (Channels.GRAYSCALE, Channels.RGB)
 
     def __init__(
         self,
@@ -692,9 +730,12 @@ class NumpySettings(Settings):
 
 class RleSettings(Settings):
     _DEFAULT_COLOR_CHANNELS = Channels.RGB
+    _SUPPORTED_CHANNELS = (Channels.GRAYSCALE, Channels.RGB)
 
     def __init__(
-        self, bits: int | None = None, channels: Channels | None = None
+        self,
+        bits: int | None = None,
+        channels: Literal[Channels.GRAYSCALE, Channels.RGB] | None = None,
     ) -> None:
         super().__init__(bits, channels)
 
@@ -712,8 +753,6 @@ class RleSettings(Settings):
     def photometric_interpretation(self) -> str:
         if self.channels == Channels.GRAYSCALE:
             return "MONOCHROME2"
-        if self.channels == Channels.YBR:
-            return "YBR_FULL"
         return "RGB"
 
     @property

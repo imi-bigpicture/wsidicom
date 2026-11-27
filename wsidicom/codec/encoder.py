@@ -275,14 +275,20 @@ class PillowEncoder(Encoder[JpegSettings | Jpeg2kSettings]):
 
     def __init__(self, settings: JpegSettings | Jpeg2kSettings) -> None:
         if isinstance(settings, JpegSettings):
-            if settings.subsampling not in self._supported_subsamplings:
-                raise ValueError(f"Unsupported subsampling: {settings.subsampling}.")
-            subsampling = self._supported_subsamplings[settings.subsampling]
             self._pillow_settings = {
                 "quality": settings.quality,
-                "subsampling": subsampling,
                 "optimize": settings.optimize,
             }
+            if settings.channels == Channels.RGB:
+                # Pillow otherwise converts the samples to ybr. There are no chroma
+                # components to subsample.
+                self._pillow_settings["keep_rgb"] = True
+            elif settings.subsampling in self._supported_subsamplings:
+                self._pillow_settings["subsampling"] = self._supported_subsamplings[
+                    settings.subsampling
+                ]
+            else:
+                raise ValueError(f"Unsupported subsampling: {settings.subsampling}.")
             self._format = "jpeg"
         elif isinstance(settings, Jpeg2kSettings):
             if len(settings.levels) != 1:
@@ -322,9 +328,9 @@ class PillowEncoder(Encoder[JpegSettings | Jpeg2kSettings]):
     @classmethod
     def supports_settings(cls, settings: Settings) -> bool:
         if isinstance(settings, JpegSettings):
-            return (
-                settings.bits == 8
-                and settings.subsampling in cls._supported_subsamplings
+            return settings.bits == 8 and (
+                settings.channels == Channels.RGB
+                or settings.subsampling in cls._supported_subsamplings
             )
         return (
             isinstance(settings, Jpeg2kSettings)

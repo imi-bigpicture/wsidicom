@@ -16,9 +16,18 @@
 
 import numpy as np
 import pytest
-from pydicom.uid import UID, JPEGLossless, JPEGLosslessSV1
+from pydicom.uid import (
+    UID,
+    ExplicitVRLittleEndian,
+    JPEGBaseline8Bit,
+    JPEGLossless,
+    JPEGLosslessSV1,
+    JPEGLSLossless,
+    RLELossless,
+)
 
 from wsidicom.codec import Channels, Decoder, Encoder
+from wsidicom.codec.codec import Codec
 from wsidicom.codec.settings import (
     HTJpeg2000Settings,
     Jpeg2kSettings,
@@ -32,6 +41,7 @@ from wsidicom.codec.settings import (
     Subsampling,
 )
 from wsidicom.geometry import Size
+from wsidicom.uid import JPEGXL, JPEGXLLossless
 
 ALL_SETTINGS = [
     JpegSettings,
@@ -60,11 +70,11 @@ class TestSettingsAdaptedTo:
         ["settings_type", "expected_channels"],
         [
             (JpegSettings, Channels.YBR),
-            (JpegLosslessSettings, Channels.YBR),
+            (JpegLosslessSettings, Channels.RGB),
             (JpegLsSettings, Channels.RGB),
             (Jpeg2kSettings, Channels.YBR),
             (HTJpeg2000Settings, Channels.YBR),
-            (JpegXlSettings, Channels.YBR),
+            (JpegXlSettings, Channels.RGB),
             (NumpySettings, Channels.RGB),
             (RleSettings, Channels.RGB),
         ],
@@ -282,3 +292,102 @@ class TestJpegLosslessSettings:
 
         # Assert
         assert settings.transfer_syntax == transfer_syntax
+
+
+@pytest.mark.unittest
+class TestSettingsColorSpace:
+    """Formats that can not store every color space."""
+
+    @pytest.mark.parametrize(
+        "settings",
+        [JpegLosslessSettings(), JpegXlSettings(level=100), JpegXlSettings(level=90)],
+    )
+    @pytest.mark.parametrize(
+        ["samples_per_pixel", "expected_photometric_interpretation"],
+        [(1, "MONOCHROME2"), (3, "RGB")],
+    )
+    def test_adapted_settings_state_what_is_encoded(
+        self,
+        settings: Settings,
+        samples_per_pixel: int,
+        expected_photometric_interpretation: str,
+    ) -> None:
+        # Arrange
+
+        # Act
+        adapted = settings.adapted_to(8, samples_per_pixel)
+
+        # Assert
+        assert adapted.photometric_interpretation == expected_photometric_interpretation
+
+    @pytest.mark.parametrize(
+        "transfer_syntax",
+        [JPEGLossless, JPEGLosslessSV1, JPEGXLLossless, JPEGXL],
+    )
+    def test_created_settings_for_ybr_image_give_rgb(
+        self, transfer_syntax: UID
+    ) -> None:
+        # Arrange
+
+        # Act
+        settings = Settings.create(transfer_syntax, 8, "YBR_FULL")
+
+        # Assert
+        assert settings.transfer_syntax == transfer_syntax
+        assert settings.channels == Channels.RGB
+        assert settings.photometric_interpretation == "RGB"
+
+    def test_created_jpeg_settings_for_ybr_image_keep_ybr(self) -> None:
+        # Arrange
+
+        # Act
+        settings = Settings.create(JPEGBaseline8Bit, 8, "YBR_FULL_422")
+
+        # Assert
+        assert settings.channels == Channels.YBR
+
+    @pytest.mark.parametrize(
+        "settings_type",
+        [
+            JpegLosslessSettings,
+            JpegLsSettings,
+            JpegXlSettings,
+            NumpySettings,
+            RleSettings,
+        ],
+    )
+    def test_settings_with_unsupported_ybr_raise(
+        self, settings_type: type[Settings]
+    ) -> None:
+        # Arrange
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="ybr"):
+            settings_type(channels=Channels.YBR)
+
+    @pytest.mark.parametrize(
+        "transfer_syntax", [JPEGLSLossless, RLELossless, ExplicitVRLittleEndian]
+    )
+    def test_create_settings_for_unsupported_ybr_image_raises(
+        self, transfer_syntax: UID
+    ) -> None:
+        # Arrange
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="ybr"):
+            Settings.create(transfer_syntax, 8, "YBR_FULL")
+
+    @pytest.mark.parametrize(
+        ["photometric_interpretation", "expected_result"],
+        [("RGB", True), ("YBR_FULL", False)],
+    )
+    def test_codec_support_for_rle(
+        self, photometric_interpretation: str, expected_result: bool
+    ) -> None:
+        # Arrange
+
+        # Act
+        supported = Codec.is_supported(RLELossless, 3, 8, photometric_interpretation)
+
+        # Assert
+        assert supported == expected_result
