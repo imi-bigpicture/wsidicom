@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `WsiFile.instance_number`, the InstanceNumber of the file, or None if the file has none. Files created in one save are numbered consecutively from 1, so the next free number is the highest one plus one.
+- `Settings.adapted_to()`, giving encoder settings where the bits and channels not specified at creation follow the given bits and samples per pixel.
+
+### Changed
+
+- `bits` and `channels` of the encoder settings default to None, meaning not given. The properties still report 8 bits and the color channels of the format for them.
+- Settings given as `transcoding` when saving are adapted to the pixel format of each image, so that for instance `Jpeg2kSettings()` encodes a 16-bit grayscale image as such, where it previously raised `ValueError`. An `Encoder` is used as it is.
 
 ### Fixed
 

@@ -14,10 +14,11 @@
 
 """Module with settings for encoding image data."""
 
+import copy
 from abc import ABCMeta, abstractmethod
 from collections.abc import Sequence
 from enum import Enum
-from typing import Literal
+from typing import ClassVar, Literal, Self
 
 from pydicom.uid import (
     HTJ2K,
@@ -97,29 +98,84 @@ class Subsampling(Enum):
 
 
 class Settings(metaclass=ABCMeta):
-    def __init__(self, bits: int, channels: Channels) -> None:
+    _DEFAULT_BITS: ClassVar[int] = 8
+    """Bits per sample if not given."""
+    _DEFAULT_COLOR_CHANNELS: ClassVar[Channels] = Channels.YBR
+    """Channels if not given, and the channels of an adapted color image."""
+
+    def __init__(
+        self, bits: int | None = None, channels: Channels | None = None
+    ) -> None:
         """
         Initialize encoding settings.
 
         Parameters
         ----------
-            bits: int
-                Number of bits per pixel.
-            channels: Channels
-                Color channels in encoded image.
+            bits: int | None = None
+                Number of bits per pixel. If None, 8, or the bits of the image
+                the settings are adapted to.
+            channels: Channels | None = None
+                Color channels in encoded image. If None, the default color
+                channels of the format, or the channels matching the image the
+                settings are adapted to.
         """
-        self._bits = bits
-        self._channels = channels
+        self._given_bits = bits
+        self._given_channels = channels
 
     @property
     def bits(self) -> int:
         """Return bits."""
-        return self._bits
+        if self._given_bits is None:
+            return self._DEFAULT_BITS
+        return self._given_bits
 
     @property
     def channels(self) -> Channels:
         """Return channels."""
-        return self._channels
+        if self._given_channels is None:
+            return self._DEFAULT_COLOR_CHANNELS
+        return self._given_channels
+
+    def adapted_to(self, bits: int, samples_per_pixel: int) -> Self:
+        """Return settings adapted to the given bits and samples per pixel.
+
+        Bits and channels not specified when the settings were created follow the
+        given values, while specified ones are kept. Bits the format can not
+        encode, and more than 8 bits with more than one sample per pixel, are not
+        used, so the settings then do not match the given values.
+
+        Parameters
+        ----------
+        bits: int
+            Number of bits per sample.
+        samples_per_pixel: int
+            Number of samples per pixel.
+
+        Returns
+        -------
+        Self
+            Adapted settings. These settings if nothing changes.
+        """
+        adapted_bits = self.bits
+        if (
+            self._given_bits is None
+            and self._can_encode_bits(bits)
+            and (samples_per_pixel == 1 or bits <= 8)
+        ):
+            adapted_bits = bits
+        adapted_channels = self.channels
+        if self._given_channels is None and samples_per_pixel == 1:
+            adapted_channels = Channels.GRAYSCALE
+        if adapted_bits == self.bits and adapted_channels == self.channels:
+            return self
+        adapted = copy.copy(self)
+        adapted._given_bits = adapted_bits
+        adapted._given_channels = adapted_channels
+        return adapted
+
+    def _can_encode_bits(self, bits: int) -> bool:
+        """Return True if the format can encode samples of this many bits."""
+        return 1 < bits <= 16
 
     @property
     @abstractmethod
@@ -247,8 +303,8 @@ class JpegSettings(Settings):
     def __init__(
         self,
         quality: int = 80,
-        bits: int = 8,
-        channels: Channels = Channels.YBR,
+        bits: int | None = None,
+        channels: Channels | None = None,
         subsampling: Subsampling = Subsampling.R422,
         optimize: bool = False,
     ) -> None:
@@ -259,10 +315,10 @@ class JpegSettings(Settings):
         ----------
             quality: int = 80
                 JPEG quality factor. 0-100, recommended to not use higher than 95.
-            bits: int
-                Number of bits per pixel.
-            channels: Channels = Channels.YBR
-                Color channels in encoded image.
+            bits: int | None = None
+                Number of bits per pixel, see `Settings`.
+            channels: Channels | None = None
+                Color channels in encoded image, see `Settings`.
             subsampling: Subsampling = Subsampling.R420
                 Chroma subsampling settings.
             optimize: bool = False
@@ -310,13 +366,12 @@ class JpegSettings(Settings):
         JpegSettings
             Settings equal to these except for `optimize`.
         """
-        return JpegSettings(
-            quality=self.quality,
-            bits=self.bits,
-            channels=self.channels,
-            subsampling=self.subsampling,
-            optimize=optimize,
-        )
+        changed = copy.copy(self)
+        changed._optimize = optimize
+        return changed
+
+    def _can_encode_bits(self, bits: int) -> bool:
+        return bits in (8, 12)
 
     @property
     def transfer_syntax(self) -> UID:
@@ -341,8 +396,8 @@ class JpegLosslessSettings(Settings):
     def __init__(
         self,
         predictor: int = 1,
-        bits: int = 8,
-        channels: Channels = Channels.YBR,
+        bits: int | None = None,
+        channels: Channels | None = None,
     ) -> None:
         """
         Initialize JPEG lossless encoding settings.
@@ -351,10 +406,10 @@ class JpegLosslessSettings(Settings):
         ----------
             predictor: int = 1
                 JPEG predictor setting. 1-7. Use 1 for SV1.
-            bits: int = 8
-                Number of bits per pixel.
-            channels: Channels = Channels.YBR
-                Color channels in encoded image.
+            bits: int | None = None
+                Number of bits per pixel, see `Settings`.
+            channels: Channels | None = None
+                Color channels in encoded image, see `Settings`.
         """
         self._predictor = predictor
         super().__init__(bits, channels)
@@ -390,11 +445,13 @@ class JpegLosslessSettings(Settings):
 
 
 class JpegLsSettings(Settings):
+    _DEFAULT_COLOR_CHANNELS = Channels.RGB
+
     def __init__(
         self,
         level: int = 0,
-        bits: int = 8,
-        channels: Channels = Channels.RGB,
+        bits: int | None = None,
+        channels: Channels | None = None,
     ) -> None:
         """
         Initialize JPEG-LS lossless encoding settings. Only supports grayscale images.
@@ -403,8 +460,10 @@ class JpegLsSettings(Settings):
         ----------
             level: int = 0
                 JPEG-LS near-lossless level. 0-9. 0 is lossless.
-            bits: int = 8
-                Number of bits per pixel.
+            bits: int | None = None
+                Number of bits per pixel, see `Settings`.
+            channels: Channels | None = None
+                Color channels in encoded image, see `Settings`.
         """
         self._level = level
         super().__init__(bits, channels)
@@ -438,8 +497,8 @@ class Jpeg2kSettings(Settings):
     def __init__(
         self,
         levels: float | Sequence[float] = 80,
-        bits: int = 8,
-        channels: Channels = Channels.YBR,
+        bits: int | None = None,
+        channels: Channels | None = None,
     ) -> None:
         """
         Initialize JPEG 2000 encoding settings.
@@ -448,10 +507,10 @@ class Jpeg2kSettings(Settings):
         ----------
             levels: float | Sequence[float] = 80
                 JPEG 2000 compression levels in dB. Set to 0 for lossless.
-            bits: int = 8
-                Number of bits per pixel.
-            channels: Channels = Channels.YBR
-                Color channels in encoded image.
+            bits: int | None = None
+                Number of bits per pixel, see `Settings`.
+            channels: Channels | None = None
+                Color channels in encoded image, see `Settings`.
         """
         if isinstance(levels, (int, float)):
             levels = [levels]
@@ -511,8 +570,8 @@ class JpegXlSettings(Settings):
     def __init__(
         self,
         level: int | None = None,
-        bits: int = 8,
-        channels: Channels = Channels.YBR,
+        bits: int | None = None,
+        channels: Channels | None = None,
     ) -> None:
         """
         Initialize JPEG XL encoding settings.
@@ -521,10 +580,10 @@ class JpegXlSettings(Settings):
         ----------
             level: int | None = None
                 JPEG XL compression level. -100-100. Set to 100 for lossless.
-            bits: int = 8
-                Number of bits per pixel.
-            channels: Channels = Channels.YBR
-                Color channels in encoded image.
+            bits: int | None = None
+                Number of bits per pixel, see `Settings`.
+            channels: Channels | None = None
+                Color channels in encoded image, see `Settings`.
         """
         self._level = level
         self._lossless = level is not None and level >= 100
@@ -560,10 +619,12 @@ class JpegXlSettings(Settings):
 
 
 class NumpySettings(Settings):
+    _DEFAULT_COLOR_CHANNELS = Channels.RGB
+
     def __init__(
         self,
-        bits: int = 8,
-        channels: Literal[Channels.GRAYSCALE, Channels.RGB] = Channels.RGB,
+        bits: int | None = None,
+        channels: Literal[Channels.GRAYSCALE, Channels.RGB] | None = None,
         little_endian: bool = True,
         implicit_vr: bool = False,
     ) -> None:
@@ -572,10 +633,10 @@ class NumpySettings(Settings):
 
         Parameters
         ----------
-            bits: int = 8
-                Number of bits per pixel.
-            channels: Literal[Channels.GRAYSCALE, Channels.RGB] = Channels.RGB,
-                Color channels in encoded image.
+            bits: int | None = None
+                Number of bits per pixel, see `Settings`.
+            channels: Literal[Channels.GRAYSCALE, Channels.RGB] | None = None
+                Color channels in encoded image, see `Settings`.
             little_endian: bool = True
                 Endianness of encoded image.
             implicit_vr: bool = False
@@ -590,6 +651,9 @@ class NumpySettings(Settings):
             f"{self.__class__.__name__}(bits={self.bits}, channels={self.channels}, "
             f"little_endian={self.little_endian}, implicit_vr={self.implicit_vr})"
         )
+
+    def _can_encode_bits(self, bits: int) -> bool:
+        return bits in (8, 16)
 
     @property
     def little_endian(self) -> bool:
@@ -621,8 +685,15 @@ class NumpySettings(Settings):
 
 
 class RleSettings(Settings):
-    def __init__(self, bits: int = 8, channels: Channels = Channels.RGB) -> None:
+    _DEFAULT_COLOR_CHANNELS = Channels.RGB
+
+    def __init__(
+        self, bits: int | None = None, channels: Channels | None = None
+    ) -> None:
         super().__init__(bits, channels)
+
+    def _can_encode_bits(self, bits: int) -> bool:
+        return bits in (8, 16)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(bits={self.bits}, channels={self.channels})"

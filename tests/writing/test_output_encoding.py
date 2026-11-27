@@ -23,6 +23,7 @@ from wsidicom.codec import (
     Encoder,
     Jpeg2kSettings,
     JpegSettings,
+    Settings,
 )
 from wsidicom.codec.recoder import JpegOptimizer
 from wsidicom.instance import ImageData
@@ -58,14 +59,16 @@ def create_image_data(
     encoder: Encoder,
     transfer_syntax: UID,
     transcoder: Encoder | None = None,
+    bits: int = 8,
+    samples_per_pixel: int = 3,
 ) -> ImageData:
-    """Return mocked 8-bit, 3-sample image data with the encoding given."""
+    """Return mocked image data with the encoding and pixel format given."""
     image_data = decoy.mock(cls=ImageData)
     decoy.when(image_data.encoder).then_return(encoder)
     decoy.when(image_data.transfer_syntax).then_return(transfer_syntax)
     decoy.when(image_data.transcoder).then_return(transcoder)
-    decoy.when(image_data.bits).then_return(8)
-    decoy.when(image_data.samples_per_pixel).then_return(3)
+    decoy.when(image_data.bits).then_return(bits)
+    decoy.when(image_data.samples_per_pixel).then_return(samples_per_pixel)
     return image_data
 
 
@@ -228,6 +231,70 @@ class TestEncodingResolver:
         image_data = create_image_data(decoy, jpeg_2000_encoder, JPEG2000Lossless)
         transcoder = Encoder.create_for_settings(JpegSettings(bits=12))
         resolver = EncodingResolver(transcoder, TranscodingMode.MATCH)
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="must match image data bits"):
+            resolver.resolve(image_data)
+
+    def test_settings_are_adapted_to_each_pixel_format(
+        self, decoy: Decoy, jpeg_encoder: Encoder
+    ) -> None:
+        # Arrange
+        gray = create_image_data(
+            decoy, jpeg_encoder, JPEGBaseline8Bit, bits=16, samples_per_pixel=1
+        )
+        color = create_image_data(decoy, jpeg_encoder, JPEGBaseline8Bit)
+        resolver = EncodingResolver(Jpeg2kSettings(), TranscodingMode.MATCH)
+
+        # Act
+        gray_encoder = resolver.resolve(gray).transcoder
+        color_encoder = resolver.resolve(color).transcoder
+
+        # Assert
+        assert gray_encoder is not None
+        assert (gray_encoder.bits, gray_encoder.channels) == (16, Channels.GRAYSCALE)
+        assert color_encoder is not None
+        assert (color_encoder.bits, color_encoder.channels) == (8, Channels.YBR)
+
+    def test_generated_tiles_encoder_is_adapted_to_the_pixel_format(
+        self, decoy: Decoy, jpeg_encoder: Encoder
+    ) -> None:
+        # Arrange
+        image_data = create_image_data(
+            decoy, jpeg_encoder, JPEGBaseline8Bit, samples_per_pixel=1
+        )
+        resolver = EncodingResolver(JpegSettings(), TranscodingMode.MATCH)
+
+        # Act
+        encoding = resolver.resolve(image_data)
+
+        # Assert
+        assert isinstance(encoding, CopiedEncoding)
+        assert encoding.generated_tiles_encoder.channels == Channels.GRAYSCALE
+
+    def test_encoder_is_not_adapted(self, decoy: Decoy, jpeg_encoder: Encoder) -> None:
+        # Arrange
+        image_data = create_image_data(
+            decoy, jpeg_encoder, JPEGBaseline8Bit, samples_per_pixel=1
+        )
+        resolver = EncodingResolver(jpeg_encoder, TranscodingMode.ALWAYS)
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="must match image data bits"):
+            resolver.resolve(image_data)
+
+    @pytest.mark.parametrize(
+        "settings",
+        [JpegSettings(), Jpeg2kSettings(bits=8), Jpeg2kSettings(channels=Channels.YBR)],
+    )
+    def test_settings_that_can_not_be_adapted_raise(
+        self, decoy: Decoy, jpeg_encoder: Encoder, settings: Settings
+    ) -> None:
+        # Arrange
+        image_data = create_image_data(
+            decoy, jpeg_encoder, JPEGBaseline8Bit, bits=16, samples_per_pixel=1
+        )
+        resolver = EncodingResolver(settings, TranscodingMode.ALWAYS)
 
         # Act & Assert
         with pytest.raises(ValueError, match="must match image data bits"):
