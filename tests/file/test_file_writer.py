@@ -575,6 +575,8 @@ class TestPyramidFileWriterIntegration:
             pytest.skip("base level is already RLE")
         channels = Channels.RGB if base.samples_per_pixel == 3 else Channels.GRAYSCALE
         level_1_path = tmp_path / "level_1"
+        bits = base.bits
+        assert bits == 8 or bits == 16
         wsi.save(
             level_1_path,
             uid_generator,
@@ -582,7 +584,7 @@ class TestPyramidFileWriterIntegration:
             include_labels=False,
             include_overviews=False,
             include_thumbnails=False,
-            transcoding=RleSettings(base.bits, channels),
+            transcoding=RleSettings(bits, channels),
         )
         others_path = tmp_path / "others"
         wsi.save(
@@ -670,7 +672,9 @@ class TestPyramidFileWriterIntegration:
             include_thumbnails=False,
         )
         output_path = tmp_path / "output"
-        transcoder = Encoder.create_for_settings(JpegSettings(bits=base.bits))
+        bits = base.bits
+        assert bits == 8 or bits == 12
+        transcoder = Encoder.create_for_settings(JpegSettings(bits=bits))
         with WsiDicom.open(
             list(level_1_path.iterdir()) + list(others_path.iterdir())
         ) as mixed:

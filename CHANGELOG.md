@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `JpegLosslessSettings` and `JpegXlSettings` default to `Channels.RGB`. `Settings.create()` gives RGB for a lossless JPEG or JPEG XL image stated as `YBR_FULL`.
 - `JpegLosslessSettings`, `JpegLsSettings`, `JpegXlSettings`, `NumpySettings` and `RleSettings` raise `ValueError` for `Channels.YBR`, as they can not store the samples as YBR.
 - RLE images stated as `YBR_FULL` are not opened, as decoded samples are not color converted. This includes images written with `RleSettings(channels=Channels.YBR)`.
+- Encoder settings raise `ValueError` for bits their format does not support, where it previously failed when encoding, or not at all. `bits` of `JpegSettings` is typed as 8 or 12, and of `NumpySettings` and `RleSettings` as 8 or 16.
 - Pillow 10.2 or later is required, for the `keep_rgb` option that stores the samples of a JPEG as RGB.
 
 ### Fixed
@@ -30,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Color images encoded with JPEG XL were stated as `YBR_FULL` unless `Channels.RGB` was given. They are now stated as RGB, the color space of the samples for lossless JPEG XL. Lossy JPEG XL stores the samples as XYB, which the codestream states, and is also stated as RGB as XYB is not a photometric interpretation of whole slide images.
 - `PillowEncoder`, used when imagecodecs is not installed, stored JPEG with `Channels.RGB` as YBR while stating RGB, so that the colors were wrong when read. The samples are now stored as RGB, and the chroma subsampling is ignored, as it is with imagecodecs.
 - RLE encoded with `Channels.YBR` was stated as `YBR_FULL` though the samples were stored as given, normally RGB.
+- RLE and uncompressed images with 9-15 bits are no longer opened. Uncompressed ones were cut to 8 bits when read, and when levels were added to them.
 - `JpegLosslessSettings` with predictor 1, the default, gave JPEG Lossless instead of SV1. So did `Settings.create()` for SV1, so that levels added to an SV1 image were written as JPEG Lossless.
 
 ## [0.37.0] - 2026-11-20

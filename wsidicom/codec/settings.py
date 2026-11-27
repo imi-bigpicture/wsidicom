@@ -16,7 +16,7 @@
 
 import copy
 from abc import ABCMeta, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from enum import Enum
 from typing import ClassVar, Literal, Self
 
@@ -104,6 +104,8 @@ class Settings(metaclass=ABCMeta):
     """Channels if not given, and the channels of an adapted color image."""
     _SUPPORTED_CHANNELS: ClassVar[tuple[Channels, ...]] = tuple(Channels)
     """Channels that can be given."""
+    _SUPPORTED_BITS: ClassVar[Collection[int]] = range(2, 17)
+    """Bits per sample the format supports."""
 
     def __init__(
         self, bits: int | None = None, channels: Channels | None = None
@@ -124,8 +126,10 @@ class Settings(metaclass=ABCMeta):
         Raises
         ------
         ValueError
-            If the format does not support the channels.
+            If the format does not support the bits or the channels.
         """
+        if bits is not None and bits not in self._SUPPORTED_BITS:
+            raise ValueError(f"{type(self).__name__} does not support {bits} bits.")
         if channels is not None and channels not in self._SUPPORTED_CHANNELS:
             raise ValueError(
                 f"{type(self).__name__} does not support {channels.value} channels."
@@ -170,7 +174,7 @@ class Settings(metaclass=ABCMeta):
         adapted_bits = self.bits
         if (
             self._given_bits is None
-            and self._can_encode_bits(bits)
+            and bits in self._SUPPORTED_BITS
             and (samples_per_pixel == 1 or bits <= 8)
         ):
             adapted_bits = bits
@@ -183,10 +187,6 @@ class Settings(metaclass=ABCMeta):
         adapted._given_bits = adapted_bits
         adapted._given_channels = adapted_channels
         return adapted
-
-    def _can_encode_bits(self, bits: int) -> bool:
-        """Return True if the format can encode samples of this many bits."""
-        return 1 < bits <= 16
 
     @property
     @abstractmethod
@@ -273,6 +273,10 @@ class Settings(metaclass=ABCMeta):
         ]
         channels = Channels.from_photometric_interpretation(photometric_interpretation)
         if transfer_syntax in jpeg_transfer_syntaxes:
+            if bits != 8 and bits != 12:
+                raise ValueError(
+                    f"Unsupported transfer syntax for {bits} bits: {transfer_syntax}."
+                )
             return JpegSettings(bits=bits, channels=channels)
         if transfer_syntax in jpeg_lossless_transfer_syntaxes:
             # Predictor 1 gives SV1. Any other gives the general transfer syntax,
@@ -308,6 +312,11 @@ class Settings(metaclass=ABCMeta):
             if transfer_syntax == JPEGLSNearLossless:
                 return JpegLsSettings(level=1, bits=bits, channels=channels)
             return JpegLsSettings(level=0, bits=bits, channels=channels)
+        # RLE and uncompressed images are supported with 8 or 16 bits.
+        if bits != 8 and bits != 16:
+            raise ValueError(
+                f"Unsupported transfer syntax for {bits} bits: {transfer_syntax}."
+            )
         if transfer_syntax == RLELossless:
             return RleSettings(bits=bits, channels=channels)
         if transfer_syntax in uncompressed_transfer_syntaxes:
@@ -323,10 +332,12 @@ class Settings(metaclass=ABCMeta):
 class JpegSettings(Settings):
     """JPEG encoding settings."""
 
+    _SUPPORTED_BITS = (8, 12)
+
     def __init__(
         self,
         quality: int = 80,
-        bits: int | None = None,
+        bits: Literal[8, 12] | None = None,
         channels: Channels | None = None,
         subsampling: Subsampling = Subsampling.R422,
         optimize: bool = False,
@@ -338,7 +349,7 @@ class JpegSettings(Settings):
         ----------
             quality: int = 80
                 JPEG quality factor. 0-100, recommended to not use higher than 95.
-            bits: int | None = None
+            bits: Literal[8, 12] | None = None
                 Number of bits per pixel, see `Settings`.
             channels: Channels | None = None
                 Color channels in encoded image, see `Settings`.
@@ -393,9 +404,6 @@ class JpegSettings(Settings):
         changed = copy.copy(self)
         changed._optimize = optimize
         return changed
-
-    def _can_encode_bits(self, bits: int) -> bool:
-        return bits in (8, 12)
 
     @property
     def transfer_syntax(self) -> UID:
@@ -664,10 +672,11 @@ class JpegXlSettings(Settings):
 class NumpySettings(Settings):
     _DEFAULT_COLOR_CHANNELS = Channels.RGB
     _SUPPORTED_CHANNELS = (Channels.GRAYSCALE, Channels.RGB)
+    _SUPPORTED_BITS = (8, 16)
 
     def __init__(
         self,
-        bits: int | None = None,
+        bits: Literal[8, 16] | None = None,
         channels: Literal[Channels.GRAYSCALE, Channels.RGB] | None = None,
         little_endian: bool = True,
         implicit_vr: bool = False,
@@ -677,7 +686,7 @@ class NumpySettings(Settings):
 
         Parameters
         ----------
-            bits: int | None = None
+            bits: Literal[8, 16] | None = None
                 Number of bits per pixel, see `Settings`.
             channels: Literal[Channels.GRAYSCALE, Channels.RGB] | None = None
                 Color channels in encoded image, see `Settings`.
@@ -695,9 +704,6 @@ class NumpySettings(Settings):
             f"{self.__class__.__name__}(bits={self.bits}, channels={self.channels}, "
             f"little_endian={self.little_endian}, implicit_vr={self.implicit_vr})"
         )
-
-    def _can_encode_bits(self, bits: int) -> bool:
-        return bits in (8, 16)
 
     @property
     def little_endian(self) -> bool:
@@ -731,16 +737,14 @@ class NumpySettings(Settings):
 class RleSettings(Settings):
     _DEFAULT_COLOR_CHANNELS = Channels.RGB
     _SUPPORTED_CHANNELS = (Channels.GRAYSCALE, Channels.RGB)
+    _SUPPORTED_BITS = (8, 16)
 
     def __init__(
         self,
-        bits: int | None = None,
+        bits: Literal[8, 16] | None = None,
         channels: Literal[Channels.GRAYSCALE, Channels.RGB] | None = None,
     ) -> None:
         super().__init__(bits, channels)
-
-    def _can_encode_bits(self, bits: int) -> bool:
-        return bits in (8, 16)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(bits={self.bits}, channels={self.channels})"

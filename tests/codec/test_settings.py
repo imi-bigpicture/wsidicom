@@ -20,6 +20,7 @@ from pydicom.uid import (
     UID,
     ExplicitVRLittleEndian,
     JPEGBaseline8Bit,
+    JPEGExtended12Bit,
     JPEGLossless,
     JPEGLosslessSV1,
     JPEGLSLossless,
@@ -388,6 +389,59 @@ class TestSettingsColorSpace:
 
         # Act
         supported = Codec.is_supported(RLELossless, 3, 8, photometric_interpretation)
+
+        # Assert
+        assert supported == expected_result
+
+
+@pytest.mark.unittest
+class TestSettingsBits:
+    @pytest.mark.parametrize(
+        ["settings_type", "bits"],
+        [
+            (JpegSettings, 16),
+            (JpegLosslessSettings, 17),
+            (JpegLsSettings, 1),
+            (JpegLsSettings, 24),
+            (Jpeg2kSettings, 17),
+            (NumpySettings, 12),
+            (RleSettings, 12),
+        ],
+    )
+    def test_unsupported_bits_raise(
+        self, settings_type: type[Settings], bits: int
+    ) -> None:
+        # Arrange
+
+        # Act & Assert
+        with pytest.raises(ValueError, match=f"{bits} bits"):
+            settings_type(bits=bits)
+
+    @pytest.mark.parametrize(
+        ["transfer_syntax", "bits"],
+        [
+            (JPEGExtended12Bit, 16),
+            (RLELossless, 12),
+            (ExplicitVRLittleEndian, 12),
+        ],
+    )
+    def test_create_settings_for_unsupported_bits_raises(
+        self, transfer_syntax: UID, bits: int
+    ) -> None:
+        # Arrange
+
+        # Act & Assert
+        with pytest.raises(ValueError, match=f"{bits} bits"):
+            Settings.create(transfer_syntax, bits, "MONOCHROME2")
+
+    @pytest.mark.parametrize(["bits", "expected_result"], [(12, False), (16, True)])
+    def test_codec_support_for_uncompressed(
+        self, bits: int, expected_result: bool
+    ) -> None:
+        # Arrange
+
+        # Act
+        supported = Codec.is_supported(ExplicitVRLittleEndian, 1, bits, "MONOCHROME2")
 
         # Assert
         assert supported == expected_result
