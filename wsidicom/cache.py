@@ -165,8 +165,12 @@ class FrameCache(Generic[CacheItemType]):
     """Cache of frames, keyed by image data and frame index."""
 
     def __init__(self, size: int) -> None:
-        self._size = size
         self._lru_cache = LRU[tuple[int, int], CacheItemType](size)
+
+    @property
+    def size(self) -> int:
+        """The most bytes of frames the cache keeps."""
+        return self._lru_cache.maxsize
 
     def get_tile_frame(
         self,

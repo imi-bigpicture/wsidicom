@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `WsiFile.instance_number`, the InstanceNumber of the file, or None if the file has none. Files created in one save are numbered consecutively from 1, so the next free number is the highest one plus one.
 - `Settings.adapted_to()`, giving encoder settings where the bits and channels not specified at creation follow the given bits and samples per pixel.
 - `FrameGetter` and `FramesGetter` in `wsidicom.cache`, protocols for the functions that `get_tile_frame()` and `get_tile_frames()` of the frame caches read missing frames with.
+- `size` of the frame caches, the most bytes of frames the cache keeps, as given at creation or to `resize()`.
 
 ### Changed
 

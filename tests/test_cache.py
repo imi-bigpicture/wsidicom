@@ -106,6 +106,16 @@ class TestFrameCache:
         # Assert
         assert len(fetched) == FRAME_COUNT
 
+    def test_size_is_the_size_resized_to(self) -> None:
+        # Arrange
+        cache = EncodedFrameCache(ITEM_SIZE)
+
+        # Act
+        cache.resize(2 * ITEM_SIZE)
+
+        # Assert
+        assert cache.size == 2 * ITEM_SIZE
+
 
 @pytest.mark.unittest
 class TestDecodedFrameCache:
