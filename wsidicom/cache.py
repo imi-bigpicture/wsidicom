@@ -16,7 +16,7 @@ from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator, MutableMapping, Sequence
 from dataclasses import dataclass
 from threading import Condition, Lock
-from typing import Any, Generic, TypeVar, cast
+from typing import Any, Generic, Protocol, TypeVar, cast
 
 import numpy as np
 from cachetools import LRUCache, cachedmethod
@@ -120,6 +120,47 @@ class LRU(Generic[CacheKeyType, CacheItemType]):
                 self._size -= self._cache.pop(next(iter(self._cache))).size
 
 
+FrameType = TypeVar("FrameType", covariant=True)
+
+
+class FrameGetter(Protocol[FrameType]):
+    """Reads a frame that is not in a frame cache."""
+
+    def __call__(self, frame_index: int, /) -> FrameType:
+        """Return the frame of an index.
+
+        Parameters
+        ----------
+        frame_index: int
+            Index of the frame.
+
+        Returns
+        -------
+        FrameType
+            The frame.
+        """
+        ...
+
+
+class FramesGetter(Protocol[FrameType]):
+    """Reads the frames that are not in a frame cache, in one call."""
+
+    def __call__(self, frame_indices: Iterable[int], /) -> Iterator[FrameType]:
+        """Return the frames of several indices.
+
+        Parameters
+        ----------
+        frame_indices: Iterable[int]
+            Indices of the frames. An index may be included several times.
+
+        Returns
+        -------
+        Iterator[FrameType]
+            One frame for each index, in the order of the indices.
+        """
+        ...
+
+
 class FrameCache(Generic[CacheItemType]):
     """Cache of frames, keyed by image data and frame index."""
 
@@ -131,7 +172,7 @@ class FrameCache(Generic[CacheItemType]):
         self,
         image_data_id: int,
         frame_index: int,
-        frame_getter: Callable[[int], CacheItemType],
+        frame_getter: FrameGetter[CacheItemType],
     ) -> CacheItemType:
         if self._lru_cache.maxsize < 1:
             return frame_getter(frame_index)
@@ -146,7 +187,7 @@ class FrameCache(Generic[CacheItemType]):
         self,
         image_data_id: int,
         frame_indices: Sequence[int],
-        frames_getter: Callable[[Iterable[int]], Iterator[CacheItemType]],
+        frames_getter: FramesGetter[CacheItemType],
     ) -> Iterator[CacheItemType]:
         if self._lru_cache.maxsize < 1:
             yield from frames_getter(frame_indices)
